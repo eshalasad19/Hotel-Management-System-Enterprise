@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from '../../api/authApi';
 
 const API_URL = "http://localhost:5001/api";
 
@@ -20,6 +20,7 @@ const BookingNew = () => {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState(null);
   const [guestError, setGuestError] = useState("");
+  const [errorPopup, setErrorPopup] = useState({ show: false, message: '' });
 
   const [form, setForm] = useState({
     guestName: "",
@@ -30,10 +31,12 @@ const BookingNew = () => {
     checkOut: "",
     guests: 1,
 
-    paymentMethod: "cash",
+   paymentMethod: "cash",
     paymentStatus: "pending",
 
     specialRequests: "",
+    redeemPoints: 0,
+    availablePoints: 0,
   });
 
   const today = new Date().toISOString().split("T")[0];
@@ -44,8 +47,8 @@ const BookingNew = () => {
   const loadRooms = async () => {
     try {
       const [roomsRes, bookingsRes] = await Promise.all([
-        axios.get(`${API_URL}/rooms`, { headers }),
-        axios.get(`${API_URL}/bookings/all`, { headers }),
+        api.get(`${API_URL}/rooms`, { headers }),
+        api.get(`${API_URL}/bookings/all`, { headers }),
       ]);
 
       const allRooms = roomsRes.data;
@@ -108,7 +111,8 @@ const BookingNew = () => {
     if (Number(guests) > maxGuests) {
       setGuestError(`Maximum ${maxGuests} guests allowed`);
 
-      return alert(`Maximum ${maxGuests} guests allowed`);
+      setErrorPopup({ show: true, message: `Maximum ${maxGuests} guests allowed for this room.` });
+      return;
     } else {
       setGuestError("");
     }
@@ -205,7 +209,7 @@ const BookingNew = () => {
       // FIX 3: Pehle walk-in guest create karo taake users page mein show ho
       let guestUserId = null;
       try {
-        const walkinRes = await axios.post(
+        const walkinRes = await api.post(
           `${API_URL}/auth/walkin-guest`,
           {
             name: form.guestName,
@@ -221,7 +225,7 @@ const BookingNew = () => {
       }
 
       // Create booking
-      await axios.post(
+      await api.post(
         `${API_URL}/bookings`,
         {
           roomId: form.roomId,
@@ -238,8 +242,8 @@ const BookingNew = () => {
           checkOutDate: form.checkOut,
           guests: form.guests,
 
-          totalAmount: summary.total,
-
+        totalAmount: summary.total,
+          redeemPoints: form.redeemPoints || 0,
           paymentMethod: form.paymentMethod,
           paymentStatus: paymentStatus,
 
@@ -286,6 +290,27 @@ const BookingNew = () => {
       <div className="row justify-content-center">
         <div className="col-lg-9">
           {error && <div className="alert alert-danger">{error}</div>}
+          {errorPopup.show && (
+            <div style={{
+              position: 'fixed', top: 24, right: 24, zIndex: 99999,
+              minWidth: 300, maxWidth: 380, background: '#fff', borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.15)', padding: '18px 22px',
+              display: 'flex', alignItems: 'center', gap: 14,
+              borderLeft: '4px solid #e74c3c'
+            }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                background: '#e74c3c', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 700
+              }}>!</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 2 }}>Notice</div>
+                <div style={{ fontSize: 13, color: '#6c757d' }}>{errorPopup.message}</div>
+              </div>
+              <button onClick={() => setErrorPopup({ show: false, message: '' })}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#adb5bd', fontSize: 18 }}>✕</button>
+            </div>
+          )}
 
           {success && <div className="alert alert-success">{success}</div>}
 
@@ -546,15 +571,80 @@ const BookingNew = () => {
                         <h6 className="fw-semibold">{summary.days}</h6>
                       </div>
 
-                      <div className="col-12 border-top pt-3">
-                        <div className="d-flex justify-content-between align-items-center">
-                          <span className="fs-15 text-muted">
-                            Total Amount:
-                          </span>
+                     <div className="col-12 border-top pt-3">
 
-                          <span className="fs-20 fw-bold text-success">
-                            PKR {summary.total.toLocaleString()}
-                          </span>
+                        {/* Loyalty Points Section */}
+                        {form.guestEmail && (
+                          <div className="mb-3 p-3 rounded" style={{ background: '#f0f9f6', border: '1px solid #0ab39c' }}>
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="fw-medium fs-13">🎁 Loyalty Points</span>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-success"
+                                onClick={async () => {
+                                  try {
+                                    const userRes = await api.get(`${API_URL}/auth/users`, { headers });
+                                    const users = userRes.data.users || [];
+                                    const guest = users.find(u => u.email === form.guestEmail);
+                                    if (guest) {
+                                      const loyaltyRes = await api.get(`${API_URL}/guest-crm/${guest._id}/loyalty`, { headers });
+                                      handleChange('availablePoints', loyaltyRes.data.points || 0);
+                                    } else {
+                                      handleChange('availablePoints', 0);
+                                    }
+                                  } catch { handleChange('availablePoints', 0); }
+                                }}
+                              >
+                                Check Points
+                              </button>
+                            </div>
+
+                            {form.availablePoints > 0 && (
+                              <div>
+                                <div className="text-muted fs-12 mb-2">
+                                  Available: <strong>{form.availablePoints} points</strong> = PKR {(form.availablePoints * 10).toLocaleString()} discount
+                                </div>
+                                <div className="d-flex gap-2 align-items-center">
+                                  <input
+                                    type="number"
+                                    className="form-control form-control-sm"
+                                    placeholder="Points to redeem"
+                                    min={0}
+                                    max={form.availablePoints}
+                                    value={form.redeemPoints || ''}
+                                    onChange={e => handleChange('redeemPoints', Number(e.target.value))}
+                                    style={{ width: 150 }}
+                                  />
+                                  <span className="text-success fs-13 fw-medium">
+                                    = PKR {((form.redeemPoints || 0) * 10).toLocaleString()} off
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {form.availablePoints === 0 && (
+                              <div className="text-muted fs-12">Enter email and click "Check Points"</div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span className="fs-15 text-muted">Total Amount:</span>
+                          <div className="text-end">
+                            {form.redeemPoints > 0 && (
+                              <div className="text-danger fs-13 text-decoration-line-through">
+                                PKR {summary.total.toLocaleString()}
+                              </div>
+                            )}
+                            <span className="fs-20 fw-bold text-success">
+                              PKR {Math.max(0, summary.total - (form.redeemPoints * 10)).toLocaleString()}
+                            </span>
+                            {form.redeemPoints > 0 && (
+                              <div className="text-success fs-12">
+                                🎁 {form.redeemPoints} points redeemed — PKR {(form.redeemPoints * 10).toLocaleString()} discount
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

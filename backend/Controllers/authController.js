@@ -2,6 +2,8 @@ const User = require('../Models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const auditLog = require('../Services/auditLogService');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 
 // ============================================================
 // HELPER — generate JWT token
@@ -100,6 +102,7 @@ const login = async (req, res) => {
         action: 'LOGIN_FAILED',
         description: `Failed login attempt for email: ${email}`,
         severity: 'warning',
+        metadata: { email },
       });
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
@@ -110,18 +113,50 @@ const login = async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      await auditLog.log(req, {
+     await auditLog.log(req, {
         action: 'LOGIN_FAILED',
         description: `Failed login attempt for user: ${user.name}`,
         severity: 'warning',
         metadata: { userId: user._id },
+        performedByName: user.name,
+        performedByRole: user.role,
       });
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
+   const rolesRequiring2FA = ['admin', 'manager', 'receptionist', 'housekeeping', 'maintenance'];
+
+    if (rolesRequiring2FA.includes(user.role) && !user.twoFactorEnabled) {
+      const tempToken = jwt.sign(
+        { id: user._id, requires2FASetup: true },
+        process.env.JWT_SECRET,
+        { expiresIn: '10m' }
+      );
+      return res.status(200).json({
+        success: true,
+        requires2FASetup: true,
+        tempToken,
+        message: '2FA setup required. Please setup Google Authenticator first.',
+      });
+    }
+
+    if (user.twoFactorEnabled) {
+      const tempToken = jwt.sign(
+        { id: user._id, requires2FA: true },
+        process.env.JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+      return res.status(200).json({
+        success: true,
+        requires2FA: true,
+        tempToken,
+        message: '2FA verification required.',
+      });
+    }
+
     const accessToken = generateAccessToken(user._id, user.role);
-const refreshToken = generateRefreshToken(user._id);
-await User.findByIdAndUpdate(user._id, { refreshToken });
+    const refreshToken = generateRefreshToken(user._id);
+    await User.findByIdAndUpdate(user._id, { refreshToken });
 
     await auditLog.log(req, {
       action: 'USER_LOGIN',
@@ -388,8 +423,138 @@ const logout = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
+const setup2FA = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    if (user.twoFactorEnabled) return res.status(400).json({ success: false, message: '2FA already enabled.' });
+
+    const secret = speakeasy.generateSecret({
+      name: `Hotel Management (${user.email})`,
+      length: 20,
+    });
+
+    await User.findByIdAndUpdate(user._id, { twoFactorSecret: secret.base32, twoFactorVerified: false });
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+    res.status(200).json({ success: true, qrCode: qrCodeUrl, secret: secret.base32, message: 'Scan this QR code with Google Authenticator.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error.', error: err.message });
+  }
+};
+// 2FA setup with tempToken (mandatory flow)
+const setup2FAWithToken = async (req, res) => {
+  try {
+    const { tempToken } = req.body;
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    if (!decoded.requires2FASetup) return res.status(400).json({ success: false, message: 'Invalid token.' });
+
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    const secret = speakeasy.generateSecret({
+      name: `Hotel Management (${user.email})`,
+      length: 20,
+    });
+
+    await User.findByIdAndUpdate(user._id, { twoFactorSecret: secret.base32, twoFactorVerified: false });
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+    res.status(200).json({ success: true, qrCode: qrCodeUrl, secret: secret.base32 });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error.', error: err.message });
+  }
+};
+
+// 2FA enable with tempToken (mandatory flow)
+const enable2FAWithToken = async (req, res) => {
+  try {
+    const { tempToken, token } = req.body;
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    const verified = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token, window: 1 });
+    if (!verified) return res.status(400).json({ success: false, message: 'Invalid code.' });
+
+    await User.findByIdAndUpdate(user._id, { twoFactorEnabled: true, twoFactorVerified: true });
+
+    res.status(200).json({ success: true, message: '2FA enabled.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error.', error: err.message });
+  }
+};
+const enable2FA = async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ success: false, message: 'Token required.' });
+
+    const user = await User.findById(req.user._id);
+    if (!user?.twoFactorSecret) return res.status(400).json({ success: false, message: 'Setup 2FA first.' });
+
+    const verified = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token, window: 1 });
+    if (!verified) return res.status(400).json({ success: false, message: 'Invalid code. Try again.' });
+
+    await User.findByIdAndUpdate(user._id, { twoFactorEnabled: true, twoFactorVerified: true });
+    await auditLog.log(req, { action: 'USER_UPDATED', targetModel: 'User', targetId: user._id, description: `${user.name} enabled 2FA`, severity: 'warning' });
+
+    res.status(200).json({ success: true, message: '2FA enabled successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error.', error: err.message });
+  }
+};
+
+const verify2FA = async (req, res) => {
+  try {
+    const { tempToken, token } = req.body;
+    if (!tempToken || !token) return res.status(400).json({ success: false, message: 'Temp token and 2FA code required.' });
+
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    if (!decoded.requires2FA) return res.status(400).json({ success: false, message: 'Invalid temp token.' });
+
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    const verified = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token, window: 1 });
+    if (!verified) {
+      await auditLog.log(req, { action: 'LOGIN_FAILED', description: `Failed 2FA attempt for ${user.name}`, severity: 'warning' });
+      return res.status(400).json({ success: false, message: 'Invalid 2FA code.' });
+    }
+
+    const accessToken = generateAccessToken(user._id, user.role);
+    const refreshToken = generateRefreshToken(user._id);
+    await User.findByIdAndUpdate(user._id, { refreshToken });
+
+    await auditLog.log(req, { action: 'USER_LOGIN', targetModel: 'User', targetId: user._id, description: `${user.name} (${user.role}) logged in with 2FA` });
+
+    res.status(200).json({ success: true, message: 'Login successful.', token: accessToken, refreshToken, user: { _id: user._id, id: user._id, name: user.name, email: user.email, phone: user.phone || '', role: user.role } });
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') return res.status(401).json({ success: false, message: '2FA session expired. Please login again.' });
+    res.status(500).json({ success: false, message: 'Server error.', error: err.message });
+  }
+};
+
+const disable2FA = async (req, res) => {
+  try {
+    const { token } = req.body;
+    const user = await User.findById(req.user._id);
+    const verified = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token, window: 1 });
+    if (!verified) return res.status(400).json({ success: false, message: 'Invalid code. Cannot disable 2FA.' });
+
+    await User.findByIdAndUpdate(user._id, { twoFactorEnabled: false, twoFactorSecret: null, twoFactorVerified: false });
+    await auditLog.log(req, { action: 'USER_UPDATED', targetModel: 'User', targetId: user._id, description: `${user.name} disabled 2FA`, severity: 'critical' });
+
+    res.status(200).json({ success: true, message: '2FA disabled.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error.', error: err.message });
+  }
+};
+
 module.exports = {
   register, login, refreshAccessToken, logout,
+  setup2FA, enable2FA, verify2FA, disable2FA,
+  setup2FAWithToken, enable2FAWithToken,
   getProfile, updateOwnProfile, changePassword,
   getAllUsers, updateUser, deleteUser, createWalkInGuest,
-};
+};;

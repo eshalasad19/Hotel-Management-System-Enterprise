@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 import { downloadCsv } from '../../utils/exportCsv';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
@@ -22,9 +22,9 @@ const Reports = () => {
   const loadData = async () => {
     try {
       const [bookingsRes, roomsRes, ordersRes] = await Promise.all([
-        axios.get(`${API_URL}/bookings/all`, { headers }),
-        axios.get(`${API_URL}/rooms`, { headers }),
-        axios.get(`${API_URL}/restaurant/orders`, { headers }).catch(() => ({ data: { data: [] } })),
+        api.get(`${API_URL}/bookings/all`, { headers }),
+        api.get(`${API_URL}/rooms`, { headers }),
+        api.get(`${API_URL}/restaurant/orders`, { headers }).catch(() => ({ data: { data: [] } })),
       ]);
       setBookings(bookingsRes.data);
       setRooms(roomsRes.data);
@@ -96,8 +96,19 @@ const Reports = () => {
   const occupiedRooms  = rooms.filter(r => r.status === 'occupied').length;
   const occupancyRate  = rooms.length > 0 ? Math.round((occupiedRooms / rooms.length) * 100) : 0;
 
-  const maxRevenue  = Math.max(...monthlyRevenue, 1);
+ const maxRevenue  = Math.max(...monthlyRevenue, 1);
   const maxBookings = Math.max(...monthlyBookings, 1);
+
+  // ✅ Advanced KPIs
+  const completedBookings = filteredBookings.filter(b => b.bookingStatus === 'completed');
+  const totalNights = completedBookings.reduce((s, b) => {
+    return s + Math.ceil((new Date(b.checkOutDate) - new Date(b.checkInDate)) / (1000 * 60 * 60 * 24));
+  }, 0);
+  const ADR    = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
+  const RevPAR = rooms.length > 0 ? Math.round(totalRevenue / rooms.length) : 0;
+  const avgBookingValue = filteredBookings.length > 0 ? Math.round(totalRevenue / filteredBookings.length) : 0;
+  const cancellationRate = filteredBookings.length > 0
+    ? Math.round((bookingStats.cancelled / filteredBookings.length) * 100) : 0;
 
   // Export functions
   const exportRevenue = () => {
@@ -153,6 +164,41 @@ const Reports = () => {
     revenue: exportRevenue, bookings: exportBookings,
     occupancy: exportOccupancy, restaurant: exportRestaurant,
   };
+
+  // ✅ Forecasting — last 3 months average se next 3 months predict karo
+  const today = new Date();
+  const currentMonth = today.getMonth();
+
+  // Last 3 months average
+  const last3Months = [0, 1, 2].map(i => {
+    const month = (currentMonth - 1 - i + 12) % 12;
+    return { revenue: monthlyRevenue[month], bookings: monthlyBookings[month] };
+  });
+
+  const avgRevenue  = Math.round(last3Months.reduce((s, m) => s + m.revenue, 0) / 3);
+  const avgBookings = Math.round(last3Months.reduce((s, m) => s + m.bookings, 0) / 3);
+
+  // Next 3 months forecast
+  const forecast = [1, 2, 3].map(i => {
+    const month = (currentMonth + i) % 12;
+    // Peak months — June, July, August, December (20% boost)
+    const peakMonths = [5, 6, 7, 11];
+    const multiplier = peakMonths.includes(month) ? 1.2 : 1.0;
+    return {
+      month: months[month],
+      revenue:  Math.round(avgRevenue * multiplier),
+      bookings: Math.round(avgBookings * multiplier),
+      isPeak: peakMonths.includes(month),
+    };
+  });
+
+  // Next 30/60/90 days
+  const next30  = Math.round(avgBookings * 1);
+  const next60  = Math.round(avgBookings * 2);
+  const next90  = Math.round(avgBookings * 3);
+  const rev30   = Math.round(avgRevenue * 1);
+  const rev60   = Math.round(avgRevenue * 2);
+  const rev90   = Math.round(avgRevenue * 3);
 
   // Date range label
   const rangeLabel = dateFrom || dateTo
@@ -212,13 +258,17 @@ const Reports = () => {
         </div>
       </div>
 
-      {/* Stats */}
+     {/* Stats */}
       <div className="row mb-3">
         {[
-          { label: 'Hotel Revenue',       value: formatPKR(totalRevenue),      icon: 'bx bx-dollar-circle',  color: 'success' },
-          { label: 'Restaurant Revenue',  value: formatPKR(restaurantRevenue), icon: 'ri-restaurant-line',   color: 'primary' },
-          { label: 'Unpaid Amount',       value: formatPKR(totalUnpaid),       icon: 'bx bx-time',           color: 'warning' },
-          { label: 'Occupancy Rate',      value: `${occupancyRate}%`,          icon: 'bx bx-building',       color: 'info'    },
+          { label: 'Hotel Revenue',      value: formatPKR(totalRevenue),      icon: 'bx bx-dollar-circle', color: 'success' },
+          { label: 'Restaurant Revenue', value: formatPKR(restaurantRevenue), icon: 'ri-restaurant-line',  color: 'primary' },
+          { label: 'Unpaid Amount',      value: formatPKR(totalUnpaid),       icon: 'bx bx-time',          color: 'warning' },
+          { label: 'Occupancy Rate',     value: `${occupancyRate}%`,          icon: 'bx bx-building',      color: 'info'    },
+          { label: 'ADR (Avg Daily Rate)',value: formatPKR(ADR),              icon: 'bx bx-trending-up',   color: 'success' },
+          { label: 'RevPAR',             value: formatPKR(RevPAR),            icon: 'ri-hotel-line',       color: 'info'    },
+          { label: 'Avg Booking Value',  value: formatPKR(avgBookingValue),   icon: 'bx bx-receipt',       color: 'primary' },
+          { label: 'Cancellation Rate',  value: `${cancellationRate}%`,       icon: 'bx bx-x-circle',      color: 'danger'  },
         ].map((s, i) => (
           <div className="col-xl-3 col-md-6" key={i}>
             <div className="card card-animate">
@@ -249,6 +299,8 @@ const Reports = () => {
               { key: 'bookings',   label: 'Booking Report'    },
               { key: 'occupancy',  label: 'Occupancy Report'  },
               { key: 'restaurant', label: 'Restaurant Report' },
+              { key: 'loyalty',    label: 'Loyalty Report'    },
+              { key: 'forecast',   label: '📈 Forecasting'    },
             ].map(tab => (
               <li className="nav-item" key={tab.key}>
                 <button className={`nav-link ${activeTab === tab.key ? 'active' : ''}`} onClick={() => setActiveTab(tab.key)}>
@@ -504,7 +556,142 @@ const Reports = () => {
               </div>
             </div>
           )}
+{/* ── LOYALTY TAB ── */}
+          {activeTab === 'loyalty' && (
+            <div>
+              <h6 className="fw-semibold mb-3">Loyalty Points Overview</h6>
+              <div className="row g-3 mb-4">
+                {[
+                  { label: 'Total Points Issued',   value: filteredBookings.reduce((s, b) => s + Math.floor(b.totalAmount / 100), 0), color: 'success' },
+                  { label: 'Total Points Redeemed', value: filteredBookings.reduce((s, b) => s + (b.redeemedPoints || 0), 0),          color: 'warning' },
+                  { label: 'Discount Given',        value: formatPKR(filteredBookings.reduce((s, b) => s + (b.discountAmount || 0), 0)), color: 'danger' },
+                  { label: 'Bookings with Discount',value: filteredBookings.filter(b => b.discountAmount > 0).length,                  color: 'info'   },
+                ].map((s, i) => (
+                  <div className="col-md-3 col-6" key={i}>
+                    <div className={`p-3 bg-${s.color}-subtle rounded text-center`}>
+                      <h3 className={`fw-bold text-${s.color} mb-1 fs-18`}>{s.value}</h3>
+                      <p className="text-muted mb-0 fs-12">{s.label}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
+              <h6 className="fw-semibold mb-3">Bookings with Loyalty Discount</h6>
+              <div className="table-responsive">
+                <table className="table table-bordered align-middle">
+                  <thead className="table-light">
+                    <tr><th>Guest</th><th>Room</th><th>Points Redeemed</th><th>Discount</th><th>Final Amount</th><th>Date</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredBookings.filter(b => b.discountAmount > 0).length === 0 ? (
+                      <tr><td colSpan="6" className="text-center text-muted py-3">No loyalty discounts yet</td></tr>
+                    ) : filteredBookings.filter(b => b.discountAmount > 0).map(b => (
+                      <tr key={b._id}>
+                        <td className="fw-medium">{b.guestName || b.userId?.name || 'Guest'}</td>
+                        <td>{b.roomId ? `Room ${b.roomId.roomNumber}` : '—'}</td>
+                        <td><span className="badge bg-warning-subtle text-warning">🎁 {b.redeemedPoints} pts</span></td>
+                        <td className="text-success fw-medium">- {formatPKR(b.discountAmount)}</td>
+                        <td className="fw-bold">{formatPKR(b.totalAmount)}</td>
+                        <td><small>{new Date(b.createdAt).toLocaleDateString('en-PK')}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {/* ── FORECASTING TAB ── */}
+          {activeTab === 'forecast' && (
+            <div>
+              <h6 className="fw-semibold mb-1">📈 Revenue & Booking Forecast</h6>
+              <p className="text-muted fs-13 mb-4">Last 3 months ke average se aglay 90 din ka estimate</p>
+
+              {/* 30/60/90 days */}
+              <div className="row g-3 mb-4">
+                {[
+                  { label: 'Next 30 Days', bookings: next30, revenue: rev30,  color: 'success' },
+                  { label: 'Next 60 Days', bookings: next60, revenue: rev60,  color: 'primary' },
+                  { label: 'Next 90 Days', bookings: next90, revenue: rev90,  color: 'info'    },
+                ].map((s, i) => (
+                  <div className="col-md-4" key={i}>
+                    <div className={`card border-${s.color} h-100`}>
+                      <div className="card-body text-center">
+                        <h6 className={`text-${s.color} fw-bold mb-3`}>{s.label}</h6>
+                        <div className="mb-2">
+                          <div className="fs-24 fw-bold">{s.bookings}</div>
+                          <div className="text-muted fs-12">Expected Bookings</div>
+                        </div>
+                        <hr />
+                        <div>
+                          <div className={`fs-18 fw-bold text-${s.color}`}>{formatPKR(s.revenue)}</div>
+                          <div className="text-muted fs-12">Expected Revenue</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Monthly forecast */}
+              <h6 className="fw-semibold mb-3">Next 3 Months Breakdown</h6>
+              <div className="table-responsive mb-4">
+                <table className="table table-bordered align-middle">
+                  <thead className="table-light">
+                    <tr><th>Month</th><th>Expected Bookings</th><th>Expected Revenue</th><th>Season</th><th>Progress</th></tr>
+                  </thead>
+                  <tbody>
+                    {forecast.map((f, i) => (
+                      <tr key={i}>
+                        <td className="fw-medium">{f.month}</td>
+                        <td>{f.bookings}</td>
+                        <td className="fw-semibold text-success">{formatPKR(f.revenue)}</td>
+                        <td>
+                          {f.isPeak
+                            ? <span className="badge bg-danger-subtle text-danger">🔥 Peak Season</span>
+                            : <span className="badge bg-secondary-subtle text-secondary">Normal</span>
+                          }
+                        </td>
+                        <td style={{ minWidth: 150 }}>
+                          <div className="progress" style={{ height: 8 }}>
+                            <div
+                              className={`progress-bar ${f.isPeak ? 'bg-danger' : 'bg-success'}`}
+                              style={{ width: `${f.isPeak ? 100 : 75}%` }}
+                            ></div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Insights */}
+              <h6 className="fw-semibold mb-3">💡 Insights</h6>
+              <div className="row g-3">
+                <div className="col-md-4">
+                  <div className="p-3 bg-success-subtle rounded">
+                    <div className="fw-semibold text-success mb-1">📊 Avg Monthly Revenue</div>
+                    <div className="fs-18 fw-bold">{formatPKR(avgRevenue)}</div>
+                    <div className="text-muted fs-12">Based on last 3 months</div>
+                  </div>
+                </div>
+                <div className="col-md-4">
+                  <div className="p-3 bg-primary-subtle rounded">
+                    <div className="fw-semibold text-primary mb-1">🛏️ Avg Monthly Bookings</div>
+                    <div className="fs-18 fw-bold">{avgBookings}</div>
+                    <div className="text-muted fs-12">Based on last 3 months</div>
+                  </div>
+                </div>
+                <div className="col-md-4">
+                  <div className="p-3 bg-warning-subtle rounded">
+                    <div className="fw-semibold text-warning mb-1">⚡ Peak Months</div>
+                    <div className="fs-18 fw-bold">Jun, Jul, Aug, Dec</div>
+                    <div className="text-muted fs-12">20% higher expected bookings</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

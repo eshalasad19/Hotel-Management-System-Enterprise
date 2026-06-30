@@ -4,13 +4,15 @@ const router = express.Router();
 const {
   createBooking,
   getMyBookings,
-  getBookingsByUserId,  // ✅ naya add kiya
+  getBookingsByUserId,
   getAllBookings,
   updateBookingStatus,
   checkInBooking,
   checkOutBooking,
   completeBooking,
   updatePaymentStatus,
+  generateBookingQR,
+  qrCheckIn,
 } = require('../Controllers/bookingController');
 
 const {
@@ -22,21 +24,22 @@ const {
 // Create Booking
 router.post('/', protect, createBooking);
 
-// My Bookings (token se)
+// QR Check-in
+router.post('/qr-checkin', protect, qrCheckIn);
+
+// My Bookings
 router.get('/my', protect, getMyBookings);
 
-// ✅ User ki bookings by userId (profile page ke liye)
+// User bookings by userId
 router.get('/user/:id', protect, getBookingsByUserId);
 
 // All Bookings (Admin/Staff)
-router.get(
-  '/all',
-  protect,
-  staffRoles('admin', 'manager', 'receptionist'),
-  getAllBookings
-);
+router.get('/all', protect, staffRoles('admin', 'manager', 'receptionist'), getAllBookings);
 
-// ✅ User apni booking cancel kare (sirf pending/confirmed)
+// QR Code generate
+router.get('/:bookingId/qr', protect, generateBookingQR);
+
+// User cancel booking
 router.put('/:id/cancel', protect, async (req, res) => {
   try {
     const booking = await require('../Models/Booking').findById(req.params.id);
@@ -60,43 +63,18 @@ router.put('/:id/cancel', protect, async (req, res) => {
 });
 
 // Update Booking Status
-router.put(
-  '/:id',
-  protect,
-  staffRoles('admin', 'manager', 'receptionist'),
-  updateBookingStatus
-);
+router.put('/:id', protect, staffRoles('admin', 'manager', 'receptionist'), updateBookingStatus);
 
 // Check-In
-router.put(
-  '/:id/check-in',
-  protect,
-  staffRoles('admin', 'manager', 'receptionist'),
-  checkInBooking
-);
+router.put('/:id/check-in', protect, staffRoles('admin', 'manager', 'receptionist'), checkInBooking);
 
 // Check-Out
-router.put(
-  '/:id/check-out',
-  protect,
-  staffRoles('admin', 'manager', 'receptionist'),
-  checkOutBooking
-);
+router.put('/:id/check-out', protect, staffRoles('admin', 'manager', 'receptionist'), checkOutBooking);
 
 // Payment Status Update
-router.put(
-  "/:id/payment",
-  protect,
-  adminOnly,
-  updatePaymentStatus
-);
+router.put('/:id/payment', protect, adminOnly, updatePaymentStatus);
 
 // Complete Booking
-router.put(
-  '/:id/complete',
-  protect,
-  staffRoles('admin', 'manager', 'receptionist'),
-  completeBooking
-);
+router.put('/:id/complete', protect, staffRoles('admin', 'manager', 'receptionist'), completeBooking);
 
 module.exports = router;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 const BASE_URL = 'http://localhost:5001';
@@ -50,7 +50,7 @@ const RestaurantMenu = () => {
 
   const loadMenu = async () => {
     try {
-      const res = await axios.get(`${API_URL}/restaurant/menu`, { headers });
+      const res = await api.get(`${API_URL}/restaurant/menu`, { headers });
       setItems(res.data.data || []);
     } catch (err) { console.error(err); }
   };
@@ -96,7 +96,7 @@ const RestaurantMenu = () => {
       return;
     }
     try {
-      await axios.post(`${API_URL}/restaurant/menu`, buildFormData(), { headers });
+      await api.post(`${API_URL}/restaurant/menu`, buildFormData(), { headers });
       setShowAddModal(false);
       resetForm();
       loadMenu();
@@ -112,7 +112,7 @@ const RestaurantMenu = () => {
       return;
     }
     try {
-      await axios.put(`${API_URL}/restaurant/menu/${selected._id}`, buildFormData(), { headers });
+      await api.put(`${API_URL}/restaurant/menu/${selected._id}`, buildFormData(), { headers });
       setShowEditModal(false);
       resetForm();
       loadMenu();
@@ -132,7 +132,7 @@ const RestaurantMenu = () => {
       fd.append('category', item.category);
       fd.append('isAvailable', !item.isAvailable);
       (item.dietaryTags || []).forEach(tag => fd.append('dietaryTags[]', tag));
-      await axios.put(`${API_URL}/restaurant/menu/${item._id}`, fd, { headers });
+      await api.put(`${API_URL}/restaurant/menu/${item._id}`, fd, { headers });
       loadMenu();
     } catch (err) { console.error(err); }
   };

@@ -1,9 +1,10 @@
 ﻿import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import LiveRoomDashboard from './LiveRoomDashboard';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -45,10 +46,10 @@ const Dashboard = () => {
   const loadDashboard = async () => {
     try {
       const [roomsRes, bookingsRes, menuRes, ordersRes] = await Promise.all([
-        axios.get(`${API_URL}/rooms`, { headers }),
-        axios.get(`${API_URL}/bookings/all`, { headers }),
-        axios.get(`${API_URL}/restaurant/menu`, { headers }).catch(() => ({ data: { data: [] } })),
-        axios.get(`${API_URL}/restaurant/orders`, { headers }).catch(() => ({ data: { data: [] } })),
+        api.get(`${API_URL}/rooms`, { headers }),
+        api.get(`${API_URL}/bookings/all`, { headers }),
+        api.get(`${API_URL}/restaurant/menu`, { headers }).catch(() => ({ data: { data: [] } })),
+        api.get(`${API_URL}/restaurant/orders`, { headers }).catch(() => ({ data: { data: [] } })),
       ]);
 
       const rooms    = roomsRes.data;
@@ -77,7 +78,6 @@ const Dashboard = () => {
         totalBookings:     bookings.length,
         availableRooms:    rooms.filter(r => r.status === 'available').length,
         occupiedRooms:     rooms.filter(r => r.status === 'occupied').length,
-        // FIX 3: reserved rooms add kiya
         reservedRooms:     rooms.filter(r => r.status === 'reserved').length,
         pendingBookings:   bookings.filter(b => b.bookingStatus === 'pending').length,
         confirmedBookings: bookings.filter(b => b.bookingStatus === 'confirmed').length,
@@ -173,6 +173,17 @@ const Dashboard = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ✅ LIVE ROOM DASHBOARD — Hotel Stats ke baad, Revenue Chart se pehle */}
+      <div className="row mt-2">
+        <div className="col-12">
+          <div className="card">
+            <div className="card-body">
+              <LiveRoomDashboard />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Restaurant Stats */}
@@ -325,7 +336,6 @@ const Dashboard = () => {
               <h4 className="card-title mb-0">Room Occupancy</h4>
             </div>
             <div className="card-body">
-              {/* FIX 3: Reserved rooms bhi add kiya */}
               <div className="row g-3 mb-3">
                 {[
                   { label: 'Available', value: stats.availableRooms, color: 'success' },
@@ -455,7 +465,6 @@ const Dashboard = () => {
                       <tr><td colSpan="6" className="text-center text-muted py-4">No bookings yet</td></tr>
                     ) : recentBookings.map(b => (
                       <tr key={b._id}>
-                        {/* FIX 1: guestName pehle check karo */}
                         <td><div className="fw-medium">{b.guestName || b.userId?.name || 'Guest'}</div></td>
                         <td>{b.roomId ? `Room ${b.roomId.roomNumber}` : '—'}</td>
                         <td>{new Date(b.checkInDate).toLocaleDateString('en-PK')}</td>
@@ -480,7 +489,6 @@ const Dashboard = () => {
               {activity.length === 0 ? (
                 <div className="text-center text-muted py-4">No activity yet</div>
               ) : activity.map((b, i) => {
-                // FIX 1: guestName pehle check karo activity mein bhi
                 const name = b.guestName || b.userId?.name || 'Guest';
                 const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
                 const text = b.bookingStatus === 'confirmed' ? 'confirmed a booking' :

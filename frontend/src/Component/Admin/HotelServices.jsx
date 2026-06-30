@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001/api";
 const BASE_URL = "http://localhost:5001";
@@ -104,7 +104,7 @@ const HotelServices = () => {
 
   const loadServices = async () => {
     try {
-      const res = await axios.get(`${API_URL}/hotel-services`, { headers });
+      const res = await api.get(`${API_URL}/hotel-services`, { headers });
       setServices(res.data);
     } catch (err) {
       console.error(err);
@@ -147,7 +147,7 @@ const HotelServices = () => {
       return;
     }
     try {
-      await axios.post(`${API_URL}/hotel-services`, buildFormData(), {
+      await api.post(`${API_URL}/hotel-services`, buildFormData(), {
         headers,
       });
       setShowAddModal(false);
@@ -165,7 +165,7 @@ const HotelServices = () => {
       return;
     }
     try {
-      await axios.put(
+      await api.put(
         `${API_URL}/hotel-services/${selected._id}`,
         buildFormData(),
         { headers },
@@ -180,7 +180,7 @@ const HotelServices = () => {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`${API_URL}/hotel-services/${selected._id}`, {
+      await api.delete(`${API_URL}/hotel-services/${selected._id}`, {
         headers: { ...headers, "Content-Type": "application/json" },
       });
       setShowDeleteModal(false);
@@ -196,7 +196,7 @@ const HotelServices = () => {
       fd.append("name", service.name);
       fd.append("category", service.category);
       fd.append("isActive", !service.isActive);
-      await axios.put(`${API_URL}/hotel-services/${service._id}`, fd, {
+      await api.put(`${API_URL}/hotel-services/${service._id}`, fd, {
         headers,
       });
       loadServices();

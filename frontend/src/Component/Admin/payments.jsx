@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = 'http://localhost:5001/api';
 
@@ -23,7 +23,7 @@ const Payments = () => {
 
   const loadBookings = async () => {
     try {
-      const res = await axios.get(`${API_URL}/bookings/all`, { headers });
+      const res = await api.get(`${API_URL}/bookings/all`, { headers });
       setBookings(res.data);
       setFiltered(res.data);
     } catch (err) { console.error(err); }
@@ -129,7 +129,8 @@ const Payments = () => {
               <td style="text-align:right;border:1px solid #dee2e6;">${formatPKR(b.roomId?.price || 0)}</td>
               <td style="text-align:right;border:1px solid #dee2e6;">${formatPKR(b.totalAmount)}</td>
             </tr>
-            ${b.specialRequests ? `<tr><td colspan="4" style="border:1px solid #dee2e6;color:#666;font-size:12px;">Special Request: ${b.specialRequests}</td></tr>` : ''}
+           ${b.specialRequests ? `<tr><td colspan="4" style="border:1px solid #dee2e6;color:#666;font-size:12px;">Special Request: ${b.specialRequests}</td></tr>` : ''}
+            ${b.discountAmount > 0 ? `<tr><td colspan="3" style="border:1px solid #dee2e6;color:#0ab39c;">🎁 Loyalty Points Discount (${b.redeemedPoints} points redeemed)</td><td style="text-align:right;border:1px solid #dee2e6;color:#0ab39c;">- ${formatPKR(b.discountAmount)}</td></tr>` : ''}
           </tbody>
           <tfoot>
             <tr style="background:#f8f9fa;font-weight:bold;">
@@ -414,6 +415,12 @@ const Payments = () => {
                       </tr>
                     </tbody>
                     <tfoot>
+                      {b.discountAmount > 0 && (
+                        <tr>
+                          <td colSpan="3" className="text-end text-success">🎁 Loyalty Discount ({b.redeemedPoints} points)</td>
+                          <td className="text-end text-success">- {formatPKR(b.discountAmount)}</td>
+                        </tr>
+                      )}
                       <tr className="table-light">
                         <td colSpan="3" className="text-end fw-bold">Total Amount</td>
                         <td className="text-end fw-bold text-success fs-16">{formatPKR(b.totalAmount)}</td>

@@ -57,13 +57,10 @@ const UserLogin = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      localStorage.clear();
       const data = await loginUser(formData);
 
       if (data.token) {
-      localStorage.setItem("hotelUser", JSON.stringify(data.user));
-        localStorage.setItem("hotelToken", data.token);
-        login(data.user, data.token);
+        login(data.user, data.token, data.refreshToken);
         showPopup('success', `Welcome back, ${data.user.name}!`);
         setTimeout(() => navigate(from, { replace: true }), 1000);
       } else {

@@ -27,6 +27,18 @@ const createMaintenance = async (req, res) => {
       severity: priority === 'high' ? 'warning' : 'info',
     });
 
+    // Real-time notification
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hotel_room').emit('new_notification', {
+        type: 'maintenance',
+        title: '🔧 Maintenance Request',
+        message: `${issueType}: ${issue}`,
+        severity: priority === 'high' ? 'danger' : 'info',
+        timestamp: new Date(),
+      });
+    }
+
     res.status(201).json({ message: 'Maintenance request created', maintenance });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

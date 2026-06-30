@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001/api";
 
@@ -38,7 +38,7 @@ const Feedback = () => {
 
   const loadFeedbacks = async () => {
     try {
-      const res = await axios.get(`${API_URL}/feedbacks`, { headers });
+      const res = await api.get(`${API_URL}/feedbacks`, { headers });
       setFeedbacks(res.data);
     } catch (err) {
       console.error(err);

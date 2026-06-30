@@ -45,6 +45,18 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  twoFactorSecret: {
+    type: String,
+    default: null
+  },
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorVerified: {
+    type: Boolean,
+    default: false
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

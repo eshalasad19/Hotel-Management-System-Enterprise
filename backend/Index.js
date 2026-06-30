@@ -14,8 +14,6 @@ const app = express();
 const {
   helmetConfig,
   generalLimiter,
-  mongoSanitizeConfig,
-  xssConfig,
   hppConfig,
   corsConfig,
   requestSizeConfig,
@@ -24,9 +22,7 @@ const {
 app.use(helmetConfig);                            // Security headers
 app.use(cors(corsConfig));                        // CORS
 app.use(express.json({ limit: requestSizeConfig.json }));
-app.use(express.urlencoded(requestSizeConfig.urlencoded));
-app.use(mongoSanitizeConfig);                     // NoSQL injection protection
-app.use(xssConfig);                               // XSS protection
+app.use(express.urlencoded(requestSizeConfig.urlencoded));                  // NoSQL injection protection
 app.use(hppConfig);                               // HTTP param pollution protection
 app.use(generalLimiter);                          // Rate limiting (all routes)
 
@@ -96,6 +92,10 @@ app.use('/api/feedbacks', feedbackRoutes);
 // Audit Logs (Admin only)
 const auditLogRoutes = require('./Routes/auditLogRoutes');
 app.use('/api/audit-logs', auditLogRoutes);
+const pricingRoutes = require('./Routes/pricingRoutes');
+app.use('/api/pricing', pricingRoutes);
+const guestCRMRoutes = require('./Routes/guestCRMRoutes');
+app.use('/api/guest-crm', guestCRMRoutes);
 
 // ============================================================
 // HEALTH CHECK
@@ -112,7 +112,7 @@ app.get('/', (req, res) => {
 // ============================================================
 // 404 HANDLER
 // ============================================================
-app.use('*', (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found.` });
 });
 
@@ -136,7 +136,37 @@ app.use((err, req, res, next) => {
 // ============================================================
 // START SERVER
 // ============================================================
+const http = require('http');
+const { Server } = require('socket.io');
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
+// Socket connection
+io.on('connection', (socket) => {
+  console.log(`⚡ Socket connected: ${socket.id}`);
+
+  socket.on('join_hotel', () => {
+    socket.join('hotel_room');
+    console.log(`Socket ${socket.id} joined hotel_room`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Socket disconnected: ${socket.id}`);
+  });
+});
+
+// io globally available karo — controllers mein use hoga
+app.set('io', io);
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
 });

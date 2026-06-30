@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -48,7 +48,7 @@ const FAQs = () => {
 
   const loadFAQs = async () => {
     try {
-      const res = await axios.get(`${API_URL}/faqs`, { headers });
+      const res = await api.get(`${API_URL}/faqs`, { headers });
       setFaqs(res.data);
     } catch (err) { console.error(err); }
   };
@@ -69,7 +69,7 @@ const FAQs = () => {
       return;
     }
     try {
-      await axios.post(`${API_URL}/faqs`, form, { headers });
+      await api.post(`${API_URL}/faqs`, form, { headers });
       setShowAddModal(false);
       setForm(emptyForm);
       loadFAQs();
@@ -83,7 +83,7 @@ const FAQs = () => {
       return;
     }
     try {
-      await axios.put(`${API_URL}/faqs/${selected._id}`, form, { headers });
+      await api.put(`${API_URL}/faqs/${selected._id}`, form, { headers });
       setShowEditModal(false);
       loadFAQs();
     } catch (err) { setError(err.response?.data?.message || 'Failed to update FAQ.'); }
@@ -91,7 +91,7 @@ const FAQs = () => {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`${API_URL}/faqs/${selected._id}`, { headers });
+      await api.delete(`${API_URL}/faqs/${selected._id}`, { headers });
       setShowDeleteModal(false);
       loadFAQs();
     } catch (err) { console.error(err); }
@@ -99,7 +99,7 @@ const FAQs = () => {
 
   const handleToggleActive = async (faq) => {
     try {
-      await axios.put(`${API_URL}/faqs/${faq._id}`, { isActive: !faq.isActive }, { headers });
+      await api.put(`${API_URL}/faqs/${faq._id}`, { isActive: !faq.isActive }, { headers });
       loadFAQs();
     } catch (err) { console.error(err); }
   };

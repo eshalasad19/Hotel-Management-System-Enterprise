@@ -72,7 +72,15 @@ const bookingSchema = new mongoose.Schema({
 
   specialRequests: {
     type: String
-  }
+  },
+  discountAmount: {
+  type: Number,
+  default: 0,
+},
+redeemedPoints: {
+  type: Number,
+  default: 0,
+},
 
 }, { timestamps: true });
 

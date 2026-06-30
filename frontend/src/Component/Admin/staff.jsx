@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = 'http://localhost:5001/api';
 
@@ -37,7 +37,7 @@ const Staff = () => {
 
   const loadStaff = async () => {
     try {
-      const res = await axios.get(`${API_URL}/auth/users`, { headers });
+      const res = await api.get(`${API_URL}/auth/users`, { headers });
       const staffOnly = res.data.filter(u =>
         ['manager', 'receptionist', 'housekeeping', 'maintenance', 'kitchen'].includes(u.role)
       );
@@ -103,7 +103,7 @@ const Staff = () => {
     if (!role)                      { setError('Please select a role.');           return; }
 
     try {
-      await axios.post(`${API_URL}/auth/register`, { name, email, phone, password, role }, { headers });
+      await api.post(`${API_URL}/auth/register`, { name, email, phone, password, role }, { headers });
       setShowAddModal(false);
       setAddForm({ name: '', email: '', phone: '', role: '', password: '' });
       loadStaff();
@@ -113,7 +113,7 @@ const Staff = () => {
   const handleEdit = async () => {
     setError('');
     try {
-      await axios.put(`${API_URL}/auth/users/${selectedStaff._id}`, editForm, { headers });
+      await api.put(`${API_URL}/auth/users/${selectedStaff._id}`, editForm, { headers });
       setShowEditModal(false);
       loadStaff();
     } catch (err) { setError(err.response?.data?.message || 'Error updating staff.'); }
@@ -122,7 +122,7 @@ const Staff = () => {
   // Deactivate instead of delete
   const handleDeactivate = async () => {
     try {
-      await axios.put(
+      await api.put(
         `${API_URL}/auth/users/${selectedStaff._id}`,
         { status: 'inactive' },
         { headers }
@@ -280,7 +280,7 @@ const Staff = () => {
                               className="btn btn-soft-success btn-sm"
                               title="Reactivate"
                               onClick={async () => {
-                                await axios.put(`${API_URL}/auth/users/${u._id}`, { status: 'active' }, { headers });
+                                await api.put(`${API_URL}/auth/users/${u._id}`, { status: 'active' }, { headers });
                                 loadStaff();
                               }}
                             >

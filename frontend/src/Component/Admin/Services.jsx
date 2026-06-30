@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -57,7 +57,7 @@ const Services = () => {
 
   const loadServices = async () => {
     try {
-      const res = await axios.get(`${API_URL}/services`, { headers });
+      const res = await api.get(`${API_URL}/services`, { headers });
       setServices(res.data);
     } catch (err) { console.error(err); }
   };
@@ -88,7 +88,7 @@ const Services = () => {
     const next = NEXT_STATUS[service.status];
     if (!next) return;
     try {
-      await axios.put(`${API_URL}/services/${service._id}`, { status: next }, { headers });
+      await api.put(`${API_URL}/services/${service._id}`, { status: next }, { headers });
       loadServices();
       if (selected?._id === service._id) setSelected({ ...service, status: next });
     } catch (err) { console.error(err); }
@@ -102,7 +102,7 @@ const Services = () => {
       return;
     }
     try {
-      await axios.post(`${API_URL}/services`, {
+      await api.post(`${API_URL}/services`, {
         guestName:   addForm.guestName,
         roomNumber:  addForm.roomNumber,
         serviceType: addForm.serviceType,

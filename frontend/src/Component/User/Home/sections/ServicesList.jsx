@@ -27,7 +27,7 @@ export default function ServicesList() {
   useEffect(() => {
     fetch(`${BASE_URL}/api/hotel-services/active`)
       .then(res => res.json())
-      .then(data => { setServices(data); setLoading(false); })
+      .then(data => { setServices(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 

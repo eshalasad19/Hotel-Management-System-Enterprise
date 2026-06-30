@@ -34,6 +34,18 @@ const createTask = async (req, res) => {
       metadata: { taskType, priority, roomId, guestRequest },
     });
 
+    // Real-time notification
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hotel_room').emit('new_notification', {
+        type: 'housekeeping',
+        title: '🧹 New Housekeeping Task',
+        message: `${taskType || 'Cleaning'} task assigned${guestRequest ? ' (Guest Request)' : ''}`,
+        severity: priority === 'high' ? 'danger' : 'warning',
+        timestamp: new Date(),
+      });
+    }
+
     res.status(201).json({ message: 'Task created', task });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

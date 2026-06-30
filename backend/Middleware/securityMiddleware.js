@@ -1,22 +1,15 @@
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
 const hpp = require('hpp');
 
 // ============================================================
 // 1. HELMET — HTTP security headers
 // ============================================================
 const helmetConfig = helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      scriptSrc: ["'self'"],
-    },
-  },
-  crossOriginEmbedderPolicy: false, // Required for image uploads
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false,
 });
 
 // ============================================================
@@ -26,7 +19,7 @@ const helmetConfig = helmet({
 // General API — 100 requests per 15 minutes per IP
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === 'development' ? 10000 : 100,
   message: {
     success: false,
     message: 'Too many requests from this IP. Please try again after 15 minutes.',
@@ -65,13 +58,12 @@ const passwordLimiter = rateLimit({
 // Prevent MongoDB operator injection ($where, $gt attacks)
 const mongoSanitizeConfig = mongoSanitize({
   replaceWith: '_',
+  allowDots: true,
   onSanitize: ({ req, key }) => {
     console.warn(`[SECURITY] MongoDB injection attempt blocked. Key: ${key}, IP: ${req.ip}`);
   },
 });
 
-// Prevent XSS attacks (strip <script> tags etc.)
-const xssConfig = xss();
 
 // Prevent HTTP Parameter Pollution
 const hppConfig = hpp({
@@ -114,8 +106,6 @@ module.exports = {
   generalLimiter,
   authLimiter,
   passwordLimiter,
-  mongoSanitizeConfig,
-  xssConfig,
   hppConfig,
   corsConfig,
   requestSizeConfig,

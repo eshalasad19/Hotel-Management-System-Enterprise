@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = 'http://localhost:5001/api';
 
@@ -61,7 +61,7 @@ const Housekeeping = () => {
 
   const loadTasks = async () => {
     try {
-      const res = await axios.get(`${API_URL}/housekeeping`, { headers });
+      const res = await api.get(`${API_URL}/housekeeping`, { headers });
       setTasks(res.data);
       setFiltered(res.data);
     } catch (err) { console.error(err); }
@@ -70,20 +70,47 @@ const Housekeeping = () => {
   const loadModalData = async () => {
     try {
       const [roomsRes, usersRes] = await Promise.all([
-        axios.get(`${API_URL}/rooms`, { headers }),
-        axios.get(`${API_URL}/auth/users`, { headers })
+        api.get(`${API_URL}/rooms`, { headers }),
+        api.get(`${API_URL}/auth/users`, { headers })
       ]);
       setRooms(roomsRes.data);
       setHkStaff(usersRes.data.filter(u => u.role === 'housekeeping'));
     } catch (err) { console.error(err); }
   };
 
-  const stats = {
+ const stats = {
     total:      tasks.length,
     pending:    tasks.filter(t => t.cleaningStatus === 'pending').length,
     inProgress: tasks.filter(t => t.cleaningStatus === 'in_progress').length,
     completed:  tasks.filter(t => t.cleaningStatus === 'completed').length,
   };
+
+  // ✅ Staff performance calculations
+  const staffPerformance = {};
+  tasks.forEach(t => {
+    if (!t.assignedStaff) return;
+    const id   = t.assignedStaff._id;
+    const name = t.assignedStaff.name;
+    if (!staffPerformance[id]) {
+      staffPerformance[id] = { name, total: 0, completed: 0, pending: 0, inProgress: 0, avgTime: [] };
+    }
+    staffPerformance[id].total++;
+    if (t.cleaningStatus === 'completed') {
+      staffPerformance[id].completed++;
+      if (t.completedAt && t.createdAt) {
+        const mins = Math.round((new Date(t.completedAt) - new Date(t.createdAt)) / 60000);
+        if (mins > 0) staffPerformance[id].avgTime.push(mins);
+      }
+    }
+    if (t.cleaningStatus === 'pending')     staffPerformance[id].pending++;
+    if (t.cleaningStatus === 'in_progress') staffPerformance[id].inProgress++;
+  });
+
+  const staffList = Object.values(staffPerformance).map(s => ({
+    ...s,
+    completionRate: s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0,
+    avgMinutes: s.avgTime.length > 0 ? Math.round(s.avgTime.reduce((a, b) => a + b, 0) / s.avgTime.length) : 0,
+  })).sort((a, b) => b.completionRate - a.completionRate);
 
   const priorityInfo = (p) => PRIORITIES.find(x => x.value === p) || PRIORITIES[1];
 
@@ -114,7 +141,7 @@ const Housekeeping = () => {
       return;
     }
     try {
-      await axios.post(`${API_URL}/housekeeping`, {
+      await api.post(`${API_URL}/housekeeping`, {
         roomId:        addForm.roomId,
         assignedStaff: addForm.staffId,
         taskType:      addForm.taskType,
@@ -132,7 +159,7 @@ const Housekeeping = () => {
     const next = NEXT_STATUS[task.cleaningStatus];
     if (!next) return;
     try {
-      await axios.put(`${API_URL}/housekeeping/${task._id}`, { cleaningStatus: next }, { headers });
+      await api.put(`${API_URL}/housekeeping/${task._id}`, { cleaningStatus: next }, { headers });
       loadTasks();
       if (selectedTask?._id === task._id) setSelectedTask({ ...task, cleaningStatus: next });
     } catch (err) { console.error(err); }
@@ -140,7 +167,7 @@ const Housekeeping = () => {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`${API_URL}/housekeeping/${selectedTask._id}`, { headers });
+      await api.delete(`${API_URL}/housekeeping/${selectedTask._id}`, { headers });
       setShowDeleteModal(false);
       setShowDetailModal(false);
       loadTasks();
@@ -279,7 +306,72 @@ const Housekeeping = () => {
           </div>
         </div>
       </div>
-
+{/* ── STAFF PERFORMANCE ── */}
+      {staffList.length > 0 && (
+        <div className="card mt-4">
+          <div className="card-header">
+            <h5 className="card-title mb-0">👥 Staff Performance</h5>
+          </div>
+          <div className="card-body">
+            <div className="table-responsive">
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th>Staff Name</th>
+                    <th>Total Tasks</th>
+                    <th>Completed</th>
+                    <th>Pending</th>
+                    <th>Avg Time</th>
+                    <th>Completion Rate</th>
+                    <th>Performance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staffList.map((s, i) => (
+                    <tr key={i}>
+                      <td>
+                        <div className="d-flex align-items-center gap-2">
+                          <div
+                            className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                            style={{ width: 36, height: 36, fontSize: 13, flexShrink: 0,
+                              background: ['#405189','#0ab39c','#f7b84b','#f06548'][i % 4] }}
+                          >
+                            {s.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <span className="fw-medium">{s.name}</span>
+                        </div>
+                      </td>
+                      <td>{s.total}</td>
+                      <td><span className="badge bg-success-subtle text-success">{s.completed}</span></td>
+                      <td><span className="badge bg-warning-subtle text-warning">{s.pending}</span></td>
+                      <td>
+                        {s.avgMinutes > 0
+                          ? <span className="text-muted fs-13">{s.avgMinutes} mins</span>
+                          : <span className="text-muted fs-13">—</span>
+                        }
+                      </td>
+                      <td><span className="fw-bold">{s.completionRate}%</span></td>
+                      <td style={{ minWidth: 150 }}>
+                        <div className="d-flex align-items-center gap-2">
+                          <div className="progress flex-grow-1" style={{ height: 8 }}>
+                            <div
+                              className={`progress-bar ${s.completionRate >= 80 ? 'bg-success' : s.completionRate >= 50 ? 'bg-warning' : 'bg-danger'}`}
+                              style={{ width: `${s.completionRate}%` }}
+                            ></div>
+                          </div>
+                          <span style={{ fontSize: 16 }}>
+                            {s.completionRate >= 80 ? '⭐' : s.completionRate >= 50 ? '👍' : '⚠️'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── DETAIL MODAL ── */}
       {showDetailModal && selectedTask && (
         <div className="modal fade show d-block" style={{ background: 'rgba(0,0,0,0.5)' }}>

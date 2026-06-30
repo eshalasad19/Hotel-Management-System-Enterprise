@@ -82,6 +82,17 @@ const updateRoom = async (req, res) => {
       metadata: { roomNumber: room.roomNumber, changes: updatedData, previousStatus },
     });
 
+    // Real-time broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hotel_room').emit('room_status_updated', {
+        roomId: updatedRoom._id,
+        roomNumber: updatedRoom.roomNumber,
+        status: updatedRoom.status,
+        type: updatedRoom.type,
+      });
+    }
+
     res.status(200).json({ message: 'Room updated successfully', room: updatedRoom });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

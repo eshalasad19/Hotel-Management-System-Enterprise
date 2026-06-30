@@ -7,13 +7,14 @@ import { useAuth } from "../../../../Context/AuthContext";
 const BookingPage = () => {
   const { roomId } = useParams();
   const navigate   = useNavigate();
-  const { user, token } = useAuth();
+  const { user, token, refreshAccessToken } = useAuth();
 
   const [room, setRoom]                   = useState(null);
   const [loading, setLoading]             = useState(false);
   const [fetching, setFetching]           = useState(true);
   const [guestError, setGuestError]       = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [errorModal, setErrorModal] = useState({ show: false, message: '' });
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -28,16 +29,15 @@ const BookingPage = () => {
   }, [user, navigate, roomId]);
 
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("hotelUser"));
-    if (storedUser) {
+    if (user) {
       setForm(prev => ({
         ...prev,
-        guestName:  storedUser.name  || "",
-        guestEmail: storedUser.email || "",
-        guestPhone: storedUser.phone || "",
+        guestName:  user.name  || "",
+        guestEmail: user.email || "",
+        guestPhone: user.phone || "",
       }));
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const fetchRoom = async () => {
@@ -55,20 +55,31 @@ const BookingPage = () => {
   }, [roomId]);
 
   const createBooking = async (bookingData) => {
-    const response = await axios.post(
-      "http://localhost:5001/api/bookings",
-      bookingData,
-      { headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
+    let currentToken = token;
+    try {
+      const response = await axios.post(
+        "http://localhost:5001/api/bookings",
+        bookingData,
+        { headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` } }
+      );
+      return response.data;
+    } catch (err) {
+      if (err.response?.status === 401) {
+        // Token expired, refresh and retry
+        currentToken = await refreshAccessToken();
+        if (!currentToken) throw err;
+        const response = await axios.post(
+          "http://localhost:5001/api/bookings",
+          bookingData,
+          { headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` } }
+        );
+        return response.data;
+      }
+      throw err;
+    }
   };
 
   const getMaxGuests = () => {
-    const type = room?.type?.toLowerCase();
-    if (type === "single") return 1;
-    if (type === "double") return 2;
-    if (type === "deluxe") return 3;
-    if (type === "suite")  return 4;
     return room?.capacity || 4;
   };
 
@@ -123,7 +134,7 @@ const BookingPage = () => {
       setShowSuccessModal(true);
     } catch (err) {
       console.log("Booking error:", err);
-      alert("Booking Failed");
+      setErrorModal({ show: true, message: err.response?.data?.message || 'Something went wrong while creating your booking. Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -343,6 +354,35 @@ const BookingPage = () => {
               }}
             >
               View My Bookings
+            </button>
+          </div>
+        </div>
+      )}
+
+    {/* ERROR MODAL */}
+      {errorModal.show && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }} onClick={() => setErrorModal({ show: false, message: '' })}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 20, maxWidth: 420, width: '100%',
+            textAlign: 'center', padding: '40px 32px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{
+              width: 70, height: 70, borderRadius: '50%', background: '#e74c3c',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px', fontSize: 30, color: '#fff', fontWeight: 700
+            }}>✕</div>
+            <h4 style={{ fontWeight: 700, marginBottom: 8, color: '#1a1a2e' }}>Booking Failed</h4>
+            <p style={{ color: '#6c757d', marginBottom: 24, lineHeight: 1.6, fontSize: 14 }}>{errorModal.message}</p>
+            <button onClick={() => setErrorModal({ show: false, message: '' })} style={{
+              background: 'linear-gradient(135deg, #c9a96e, #a67c40)', color: '#fff',
+              border: 'none', borderRadius: 50, padding: '12px 40px', fontWeight: 600,
+              fontSize: 14, cursor: 'pointer', width: '100%'
+            }}>
+              Try Again
             </button>
           </div>
         </div>

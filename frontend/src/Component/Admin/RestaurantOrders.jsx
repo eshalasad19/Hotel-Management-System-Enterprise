@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 const STATUSES = ['Pending', 'Confirmed', 'Preparing', 'Ready', 'Delivered', 'Cancelled'];
@@ -47,14 +47,14 @@ const RestaurantOrders = () => {
 
   const loadOrders = async () => {
     try {
-      const res = await axios.get(`${API_URL}/restaurant/orders`, { headers });
+      const res = await api.get(`${API_URL}/restaurant/orders`, { headers });
       setOrders(res.data.data || []);
     } catch (err) { console.error(err); }
   };
 
   const loadMenu = async () => {
     try {
-      const res = await axios.get(`${API_URL}/restaurant/menu`, { headers });
+      const res = await api.get(`${API_URL}/restaurant/menu`, { headers });
       setMenuItems((res.data.data || []).filter(i => i.isAvailable));
     } catch (err) { console.error(err); }
   };
@@ -111,7 +111,7 @@ const RestaurantOrders = () => {
     if (!orderForm.guestName) { setError('Guest name is required.'); return; }
     if (validItems.length === 0) { setError('At least one item is required.'); return; }
     try {
-      await axios.post(`${API_URL}/restaurant/orders`, {
+      await api.post(`${API_URL}/restaurant/orders`, {
         guestName:   orderForm.guestName,
         roomNumber:  orderForm.roomNumber,
         notes:       orderForm.notes,
@@ -132,7 +132,7 @@ const RestaurantOrders = () => {
     const next = NEXT_STATUS[order.status];
     if (!next) return;
     try {
-      await axios.put(`${API_URL}/restaurant/orders/${order._id}`, { status: next }, { headers });
+      await api.put(`${API_URL}/restaurant/orders/${order._id}`, { status: next }, { headers });
       loadOrders();
       // Agar detail modal open hai to wahan bhi update karo
       if (selected?._id === order._id) {
@@ -144,7 +144,7 @@ const RestaurantOrders = () => {
   // Cancel button
   const handleCancel = async (order) => {
     try {
-      await axios.put(`${API_URL}/restaurant/orders/${order._id}`, { status: 'Cancelled' }, { headers });
+      await api.put(`${API_URL}/restaurant/orders/${order._id}`, { status: 'Cancelled' }, { headers });
       loadOrders();
       if (selected?._id === order._id) {
         setSelected({ ...order, status: 'Cancelled' });

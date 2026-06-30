@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from '../../api/authApi';
 
 const API_URL = "http://localhost:5001/api";
 
@@ -31,7 +31,7 @@ const Bookings = () => {
 
   const loadBookings = async () => {
     try {
-      const res = await axios.get(`${API_URL}/bookings/all`, { headers });
+      const res = await api.get(`${API_URL}/bookings/all`, { headers });
       setBookings(res.data);
       setFiltered(res.data);
     } catch (err) {
@@ -80,14 +80,14 @@ const Bookings = () => {
   try {
 
     // Booking confirm
-    await axios.put(
+    await api.put(
       `${API_URL}/bookings/${id}`,
       { bookingStatus: "confirmed" },
       { headers }
     );
 
     // Room occupied
-    await axios.put(
+    await api.put(
       `${API_URL}/rooms/${roomId}`,
       { status: "occupied" },
       { headers }
@@ -103,7 +103,7 @@ const Bookings = () => {
 };
   const cancelBooking = async (id) => {
     try {
-      await axios.put(
+      await api.put(
         `${API_URL}/bookings/${id}`,
         { bookingStatus: "cancelled" },
         { headers },
@@ -116,7 +116,7 @@ const Bookings = () => {
   };
   const markAsPaid = async (id) => {
     try {
-      await axios.put(`${API_URL}/bookings/${id}/payment`, {}, { headers });
+      await api.put(`${API_URL}/bookings/${id}/payment`, {}, { headers });
 
       loadBookings();
     } catch (err) {
@@ -131,7 +131,7 @@ const Bookings = () => {
 
   // const handleUpdate = async () => {
   //   try {
-  //     await axios.put(`${API_URL}/bookings/${selectedBooking._id}`, updateStatus, { headers });
+  //     await api.put(`${API_URL}/bookings/${selectedBooking._id}`, updateStatus, { headers });
   //     setShowUpdateModal(false);
   //     loadBookings();
   //   } catch (err) { console.error(err); }

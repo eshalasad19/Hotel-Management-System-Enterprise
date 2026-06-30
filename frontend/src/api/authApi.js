@@ -1,24 +1,59 @@
-// src/api/authApi.js
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:5001/api/auth';
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
-// Register
+// Axios instance — sab API calls yahan se jayengi
+const api = axios.create({ baseURL: BASE_URL });
+
+// ✅ Interceptor — automatically token refresh karo
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Agar 401 aaya aur TOKEN_EXPIRED code hai aur already retry nahi kiya
+    if (
+      error.response?.status === 401 &&
+      error.response?.data?.code === 'TOKEN_EXPIRED' &&
+      !originalRequest._retry
+    ) {
+      originalRequest._retry = true;
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        const res = await axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken });
+        const newToken = res.data.token;
+        localStorage.setItem('token', newToken);
+        originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+        return api(originalRequest); // original request dobara bhejo
+      } catch {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        window.location.href = '/admin/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Auth header helper
+const authHeader = () => ({
+  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+});
+
 export const registerUser = async (formData) => {
-  const res = await axios.post(`${BASE_URL}/register`, formData);
+  const res = await api.post('/auth/register', formData);
   return res.data;
 };
 
-// Login
 export const loginUser = async (formData) => {
-  const res = await axios.post(`${BASE_URL}/login`, formData);
+  const res = await api.post('/auth/login', formData);
   return res.data;
 };
 
-// Get Profile
-export const getProfile = async (token) => {
-  const res = await axios.get(`${BASE_URL}/profile`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export const getProfile = async () => {
+  const res = await api.get('/auth/profile', authHeader());
   return res.data;
 };
+
+export default api; // dusri jagah bhi yahi axios instance use karo

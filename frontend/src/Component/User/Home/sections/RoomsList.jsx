@@ -7,8 +7,8 @@ const BASE_URL = "http://localhost:5001";
 const getImageUrl = (img) => {
   if (!img) return "https://via.placeholder.com/800x500?text=No+Image";
   if (img.startsWith("http")) return img;
-  if (img.startsWith("uploads/")) return `${BASE_URL}/${img}`;
-  return `${BASE_URL}/uploads/${img}`;
+  // Sirf filename hai jaise "double-room.jpg"
+  return `http://localhost:5001/Uploads/${img}`;
 };
 
 const getAmenityIcon = (name = "") => {
@@ -741,6 +741,7 @@ const RoomsList = () => {
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [priceRange, setPriceRange] = useState("all");
@@ -764,12 +765,15 @@ if (priceRange === "high") matchPrice = room.price > 10000;
     return matchSearch && matchCategory && matchPrice;
   });
 
-  const fetchRooms = async () => {
+ const fetchRooms = async () => {
     try {
+      setPageLoading(true);
       const data = await getRooms();
       setRooms(Array.isArray(data) ? data : data.rooms || []);
     } catch (error) {
       console.log("Rooms fetch error:", error);
+    } finally {
+      setPageLoading(false);
     }
   };
 
@@ -803,11 +807,19 @@ if (priceRange === "high") matchPrice = room.price > 10000;
     };
   }, [selectedRoom]);
 
-  if (!rooms.length) {
+  if (pageLoading) {
     return (
       <div className="text-center py-5">
         <div className="spinner-border text-primary"></div>
         <p className="mt-3 text-muted">Loading Rooms...</p>
+      </div>
+    );
+  }
+
+  if (!pageLoading && !rooms.length) {
+    return (
+      <div className="text-center py-5">
+        <p className="text-muted">No rooms available at the moment.</p>
       </div>
     );
   }

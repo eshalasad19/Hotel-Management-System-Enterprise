@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from '../../api/authApi';
 
 const API_URL = "http://localhost:5001/api";
 
@@ -32,7 +32,7 @@ const Users = () => {
 
   try {
 
-    const res = await axios.get(
+    const res = await api.get(
       `${API_URL}/auth/users`,
       { headers }
     );

@@ -42,7 +42,7 @@ export default function ServicesList() {
   );
 
   // sirf pehli 2 services show karo
-  const displayServices = services.slice(0, 2);
+  const displayServices = Array.isArray(services) ? services.slice(0, 2) : [];
 
   return (
     <section className="section">
@@ -72,7 +72,7 @@ export default function ServicesList() {
               key={item._id}
               className={`row gx-5 gy-4 gy-lg-5 ${index < displayServices.length - 1 ? 'mb-5' : ''}`}
             >
-              {/* Image — click karo toh page khule */}
+              {/* Image — click to open page */}
               <div
                 className={`col-lg-6 text-center wow fadeInLeft ${!imageFirst ? 'order-1 order-lg-2' : ''}`}
                 style={{ cursor: 'pointer' }}

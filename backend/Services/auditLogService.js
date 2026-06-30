@@ -17,12 +17,12 @@ const AuditLog = require('../Models/AuditLog');
  *     metadata: { roomNumber: room.roomNumber, totalAmount: booking.totalAmount }
  *   });
  */
-const log = async (req, { action, targetModel, targetId, description, metadata = {}, severity = 'info' }) => {
+const log = async (req, { action, targetModel, targetId, description, metadata = {}, severity = 'info', performedByName, performedByRole } = {}) => {
   try {
     await AuditLog.create({
       performedBy: req?.user?._id || null,
-      performedByName: req?.user?.name || 'System',
-      performedByRole: req?.user?.role || 'system',
+      performedByName: req?.user?.name || performedByName || req?.body?.email || 'System',
+      performedByRole: req?.user?.role || performedByRole || 'system',
       action,
       targetModel: targetModel || null,
       targetId: targetId || null,

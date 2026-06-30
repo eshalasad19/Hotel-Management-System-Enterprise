@@ -7,7 +7,9 @@ const {
   bookingConfirmationTemplate,
   cancellationTemplate,
 } = require('../Utils/emailTemplates');
-
+const { calculatePrice } = require('../Services/pricingService');
+const GuestProfile = require('../Models/GuestProfile');
+const QRCode = require('qrcode');
 // ========================
 // CREATE BOOKING
 // ========================
@@ -23,10 +25,11 @@ const createBooking = async (req, res) => {
     if (!room) return res.status(404).json({ message: "Room not found" });
     if (room.status !== "available") return res.status(400).json({ message: "Room is not available" });
 
+   const days = Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24));
     let amount = totalAmount;
     if (!amount) {
-      const days = Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24));
-      amount = days * room.price;
+      const pricing = await calculatePrice(room.price, room.type, checkInDate);
+      amount = days * pricing.finalPrice;
     }
 
     let finalPaymentStatus = paymentMethod === "online" ? "paid" : (paymentStatus || "pending");
@@ -60,7 +63,48 @@ const createBooking = async (req, res) => {
         paymentMethod,
       },
     });
+  // Loyalty points redeem karo (agar request mein aaye)
+    let discountAmount = 0;
+    if (booking.userId && req.body.redeemPoints > 0) {
+      const profile = await GuestProfile.findOne({ userId: booking.userId });
+      if (profile && profile.loyaltyPoints >= req.body.redeemPoints) {
+        discountAmount = req.body.redeemPoints * 10;
+        await GuestProfile.findByIdAndUpdate(profile._id, {
+          $inc: { loyaltyPoints: -req.body.redeemPoints }
+        });
+        // Booking amount update karo
+        await Booking.findByIdAndUpdate(booking._id, {
+          totalAmount: Math.max(0, booking.totalAmount - discountAmount),
+          discountAmount,
+          redeemedPoints: req.body.redeemPoints,
+        });
+      }
+    }
 
+    // Loyalty points earn karo — PKR 100 = 1 point
+    if (booking.userId) {
+      const finalAmount = booking.totalAmount - discountAmount;
+      const pointsEarned = Math.floor(finalAmount / 100);
+      await GuestProfile.findOneAndUpdate(
+        { userId: booking.userId },
+        {
+          $inc: { loyaltyPoints: pointsEarned },
+          $setOnInsert: { userId: booking.userId }
+        },
+        { upsert: true, new: true }
+      );
+    }
+// Real-time notification
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hotel_room').emit('new_notification', {
+        type: 'booking',
+        title: '📋 New Booking',
+        message: `Room ${room.roomNumber} booked by ${guestName || 'Guest'}`,
+        severity: 'success',
+        timestamp: new Date(),
+      });
+    }
     // Send emails
     await sendEmail({
       to: booking.guestEmail,
@@ -209,6 +253,13 @@ const checkInBooking = async (req, res) => {
       metadata: { guestName: booking.guestName, roomId: booking.roomId },
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hotel_room').emit('room_status_updated', {
+        roomId: booking.roomId,
+        status: 'occupied',
+      });
+    }
     res.status(200).json({ success: true, message: "Guest checked in successfully", booking });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -242,6 +293,13 @@ const checkOutBooking = async (req, res) => {
       metadata: { guestName: booking.guestName, roomId: booking.roomId },
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hotel_room').emit('room_status_updated', {
+        roomId: booking.roomId,
+        status: 'cleaning',
+      });
+    }
     res.status(200).json({ success: true, message: "Guest checked out successfully", booking });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -304,9 +362,95 @@ const updatePaymentStatus = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// Generate QR Code for booking
+const generateBookingQR = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.bookingId)
+      .populate('roomId', 'roomNumber type')
+      .populate('userId', 'name email');
+
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    // QR data
+    const qrData = JSON.stringify({
+      bookingId: booking._id,
+      guestName: booking.guestName || booking.userId?.name,
+      roomNumber: booking.roomId?.roomNumber,
+      checkIn: booking.checkInDate,
+      checkOut: booking.checkOutDate,
+      action: 'CHECK_IN',
+    });
+
+    const qrCode = await QRCode.toDataURL(qrData);
+
+    res.status(200).json({ success: true, qrCode, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// QR self check-in
+const qrCheckIn = async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    if (!['confirmed', 'pending'].includes(booking.bookingStatus)) {
+      return res.status(400).json({ success: false, message: `Booking is already ${booking.bookingStatus}` });
+    }
+
+    // Check-in date check
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkInDate = new Date(booking.checkInDate);
+    checkInDate.setHours(0, 0, 0, 0);
+
+    if (checkInDate > today) {
+      return res.status(400).json({
+        success: false,
+        message: `Check-in date is ${new Date(booking.checkInDate).toLocaleDateString('en-PK')}. You cannot check in early.`
+      });
+    }
+
+    booking.bookingStatus = 'checked_in';
+    await booking.save();
+    await Room.findByIdAndUpdate(booking.roomId, { status: 'occupied' });
+
+    // Audit log
+    await auditLog.log(req, {
+      action: 'BOOKING_CHECKED_IN',
+      targetModel: 'Booking',
+      targetId: booking._id,
+      description: `Self check-in via QR code — Booking ${booking._id}`,
+    });
+
+    // Real-time notification
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hotel_room').emit('room_status_updated', {
+        roomId: booking.roomId,
+        status: 'occupied',
+      });
+      io.to('hotel_room').emit('new_notification', {
+        type: 'booking',
+        title: '📱 QR Self Check-in',
+        message: `${booking.guestName} checked in via QR — Room ${booking.roomId?.roomNumber || ''}`,
+        severity: 'success',
+        timestamp: new Date(),
+      });
+    }
+
+    res.status(200).json({ success: true, message: 'Check-in successful! Welcome to the hotel.', booking });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 module.exports = {
   createBooking, getMyBookings, getBookingsByUserId,
   getAllBookings, updateBookingStatus, checkInBooking,
   checkOutBooking, completeBooking, updatePaymentStatus,
+  generateBookingQR, qrCheckIn,
 };

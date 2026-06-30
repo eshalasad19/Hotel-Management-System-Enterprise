@@ -32,6 +32,9 @@ import Services from './Component/Admin/Services';
 import FAQs from './Component/Admin/FAQs';
 import HotelServices from './Component/Admin/HotelServices';
 import AboutUs from './Component/Admin/AboutUs';
+import PricingRules from './Component/Admin/PricingRules';
+import GuestCRM from './Component/Admin/GuestCRM';
+import AuditLogs from './Component/Admin/AuditLogs';
 
 // User pages
 import Home from './Component/User/Home/Home';
@@ -44,6 +47,7 @@ import RoomDetailsPage from './Component/User/Home/RoomDetailsPage';
 import BookingPage from './Component/User/Home/sections/Booking';
 import UserLogin from './Component/User/Home/UserLogin';
 import Register from './Component/User/Home/Register';
+import QRScanner from './Component/User/Home/QRScanner';
 
 // ✅ Profile Page
 import ProfilePage from './Component/User/Home/ProfilePage';
@@ -94,6 +98,7 @@ function App() {
              <Route path="services" element={<ServicesPage />} />
             <Route path="roomsdetails/:id" element={<RoomDetailsPage />} />
             <Route path="booking/:roomId" element={<BookingPage />} />
+            <Route path="/qr-checkin" element={<QRScanner />} />
 
             {/* ✅ Profile Route */}
             <Route path="profile" element={<ProfilePage />} />
@@ -121,6 +126,10 @@ function App() {
             <Route path="/admin/faqs" element={<FAQs />} />
             <Route path="/admin/hotel-services" element={<HotelServices />} />
             <Route path="/admin/about-us" element={<AboutUs />} />
+            <Route path="/admin/pricing" element={<PricingRules />} />
+            <Route path="/admin/guest-crm" element={<GuestCRM />} />
+            <Route path="/admin/audit-logs" element={<AuditLogs />} />
+
 
             
           </Route>

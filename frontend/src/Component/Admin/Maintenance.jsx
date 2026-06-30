@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = 'http://localhost:5001/api';
 
@@ -65,7 +65,7 @@ const Maintenance = () => {
 
   const loadRequests = async () => {
     try {
-      const res = await axios.get(`${API_URL}/maintenance`, { headers });
+      const res = await api.get(`${API_URL}/maintenance`, { headers });
       setRequests(res.data);
       setFiltered(res.data);
     } catch (err) { console.error(err); }
@@ -74,8 +74,8 @@ const Maintenance = () => {
   const loadModalData = async () => {
     try {
       const [roomsRes, usersRes] = await Promise.all([
-        axios.get(`${API_URL}/rooms`, { headers }),
-        axios.get(`${API_URL}/auth/users`, { headers })
+        api.get(`${API_URL}/rooms`, { headers }),
+        api.get(`${API_URL}/auth/users`, { headers })
       ]);
       setRooms(roomsRes.data);
       setMaintStaff(usersRes.data.filter(u => u.role === 'maintenance'));
@@ -88,6 +88,33 @@ const Maintenance = () => {
     inProgress: requests.filter(r => r.status === 'in_progress').length,
     resolved:   requests.filter(r => r.status === 'resolved').length,
   };
+
+  // ✅ Staff performance
+  const staffPerformance = {};
+  requests.forEach(r => {
+    if (!r.assignedTo) return;
+    const id   = r.assignedTo._id;
+    const name = r.assignedTo.name;
+    if (!staffPerformance[id]) {
+      staffPerformance[id] = { name, total: 0, resolved: 0, pending: 0, inProgress: 0, avgTime: [] };
+    }
+    staffPerformance[id].total++;
+    if (r.status === 'resolved') {
+      staffPerformance[id].resolved++;
+      if (r.resolvedAt && r.createdAt) {
+        const mins = Math.round((new Date(r.resolvedAt) - new Date(r.createdAt)) / 60000);
+        if (mins > 0) staffPerformance[id].avgTime.push(mins);
+      }
+    }
+    if (r.status === 'pending')     staffPerformance[id].pending++;
+    if (r.status === 'in_progress') staffPerformance[id].inProgress++;
+  });
+
+  const staffList = Object.values(staffPerformance).map(s => ({
+    ...s,
+    resolutionRate: s.total > 0 ? Math.round((s.resolved / s.total) * 100) : 0,
+    avgMinutes: s.avgTime.length > 0 ? Math.round(s.avgTime.reduce((a, b) => a + b, 0) / s.avgTime.length) : 0,
+  })).sort((a, b) => b.resolutionRate - a.resolutionRate);
 
   const priorityBadge = (p) => {
     const info = PRIORITIES.find(x => x.value === p) || PRIORITIES[1];
@@ -121,7 +148,7 @@ const Maintenance = () => {
       return;
     }
     try {
-      await axios.post(`${API_URL}/maintenance`, {
+      await api.post(`${API_URL}/maintenance`, {
         roomId:     addForm.roomId,
         issue:      addForm.issue,
         issueType:  addForm.issueType,
@@ -140,7 +167,7 @@ const Maintenance = () => {
     const next = NEXT_STATUS[r.status];
     if (!next) return;
     try {
-      await axios.put(`${API_URL}/maintenance/${r._id}`, { status: next }, { headers });
+      await api.put(`${API_URL}/maintenance/${r._id}`, { status: next }, { headers });
       loadRequests();
       if (selectedRequest?._id === r._id) setSelectedRequest({ ...r, status: next });
     } catch (err) { console.error(err); }
@@ -148,7 +175,7 @@ const Maintenance = () => {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`${API_URL}/maintenance/${selectedRequest._id}`, { headers });
+      await api.delete(`${API_URL}/maintenance/${selectedRequest._id}`, { headers });
       setShowDeleteModal(false);
       setShowDetailModal(false);
       loadRequests();
@@ -292,7 +319,76 @@ const Maintenance = () => {
           </div>
         </div>
       </div>
-
+{/* ── STAFF PERFORMANCE ── */}
+      {staffList.length > 0 && (
+        <div className="card mt-4">
+          <div className="card-header">
+            <h5 className="card-title mb-0">🔧 Maintenance Staff Performance</h5>
+          </div>
+          <div className="card-body">
+            <div className="table-responsive">
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th>Staff Name</th>
+                    <th>Total Tasks</th>
+                    <th>Resolved</th>
+                    <th>Pending</th>
+                    <th>Avg Resolution Time</th>
+                    <th>Resolution Rate</th>
+                    <th>Performance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staffList.map((s, i) => (
+                    <tr key={i}>
+                      <td>
+                        <div className="d-flex align-items-center gap-2">
+                          <div
+                            className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                            style={{ width: 36, height: 36, fontSize: 13, flexShrink: 0,
+                              background: ['#405189','#0ab39c','#f7b84b','#f06548'][i % 4] }}
+                          >
+                            {s.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <span className="fw-medium">{s.name}</span>
+                        </div>
+                      </td>
+                      <td>{s.total}</td>
+                      <td><span className="badge bg-success-subtle text-success">{s.resolved}</span></td>
+                      <td><span className="badge bg-warning-subtle text-warning">{s.pending}</span></td>
+                      <td>
+                        {s.avgMinutes > 0
+                          ? <span className="text-muted fs-13">
+                              {s.avgMinutes >= 60
+                                ? `${Math.floor(s.avgMinutes / 60)}h ${s.avgMinutes % 60}m`
+                                : `${s.avgMinutes} mins`}
+                            </span>
+                          : <span className="text-muted fs-13">—</span>
+                        }
+                      </td>
+                      <td><span className="fw-bold">{s.resolutionRate}%</span></td>
+                      <td style={{ minWidth: 150 }}>
+                        <div className="d-flex align-items-center gap-2">
+                          <div className="progress flex-grow-1" style={{ height: 8 }}>
+                            <div
+                              className={`progress-bar ${s.resolutionRate >= 80 ? 'bg-success' : s.resolutionRate >= 50 ? 'bg-warning' : 'bg-danger'}`}
+                              style={{ width: `${s.resolutionRate}%` }}
+                            ></div>
+                          </div>
+                          <span style={{ fontSize: 16 }}>
+                            {s.resolutionRate >= 80 ? '⭐' : s.resolutionRate >= 50 ? '👍' : '⚠️'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── DETAIL MODAL ── */}
       {showDetailModal && selectedRequest && (
         <div className="modal fade show d-block" style={{ background: 'rgba(0,0,0,0.5)' }}>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from '../../api/authApi';
 
 const API_URL = "http://localhost:5001/api";
 
@@ -16,6 +16,7 @@ const CheckinCheckout = () => {
   const [paymentStatus, setPaymentStatus] = useState("paid");
   const [showPaymentWarning, setShowPaymentWarning] = useState(false);
   const [activeTab, setActiveTab] = useState("checkin");
+  const [qrModal, setQrModal] = useState({ show: false, qrCode: '', booking: null });
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -31,7 +32,7 @@ const CheckinCheckout = () => {
 
   const loadBookings = async () => {
     try {
-      const res = await axios.get(`${API_URL}/bookings/all`, { headers });
+      const res = await api.get(`${API_URL}/bookings/all`, { headers });
       setBookings(res.data);
     } catch (err) { console.error(err); }
   };
@@ -69,7 +70,7 @@ const checkInList = bookings.filter(
   // CHECK-IN button — status confirmed → checked_in
   const handleCheckIn = async (bookingId) => {
     try {
-      await axios.put(`${API_URL}/bookings/${bookingId}`,
+      await api.put(`${API_URL}/bookings/${bookingId}`,
         { bookingStatus: "checked_in" },
         { headers }
       );
@@ -80,7 +81,7 @@ const checkInList = bookings.filter(
   // CHECK-OUT — status checked_in → completed
   const handleCheckout = async () => {
     try {
-      await axios.put(`${API_URL}/bookings/${selectedBooking._id}`,
+      await api.put(`${API_URL}/bookings/${selectedBooking._id}`,
         { bookingStatus: "completed", paymentStatus },
         { headers }
       );
@@ -88,7 +89,14 @@ const checkInList = bookings.filter(
       loadBookings();
     } catch (err) { console.error(err); }
   };
-
+const handleGenerateQR = async (booking) => {
+    try {
+      const res = await api.get(`${API_URL}/bookings/${booking._id}/qr`, { headers });
+      setQrModal({ show: true, qrCode: res.data.qrCode, booking });
+    } catch (err) {
+      console.error(err);
+    }
+  };
   const BookingRow = ({ b, showCheckout = false }) => {
     const checkIn = new Date(b.checkInDate).toLocaleDateString("en-PK");
     const checkOut = new Date(b.checkOutDate).toLocaleDateString("en-PK");
@@ -115,11 +123,16 @@ const checkInList = bookings.filter(
         {!showCheckout && (
           <td><small className="text-muted">{b.specialRequests || "—"}</small></td>
         )}
-        {!showCheckout && (
+       {!showCheckout && (
           <td>
-            <button className="btn btn-success btn-sm" onClick={() => handleCheckIn(b._id)}>
-              <i className="ri-login-box-line me-1"></i>Check-in
-            </button>
+            <div className="d-flex gap-1">
+              <button className="btn btn-success btn-sm" onClick={() => handleCheckIn(b._id)}>
+                <i className="ri-login-box-line me-1"></i>Check-in
+              </button>
+              {/* <button className="btn btn-info btn-sm" onClick={() => handleGenerateQR(b)} title="Generate QR">
+                <i className="ri-qr-code-line"></i>
+              </button> */}
+            </div>
           </td>
         )}
         {showCheckout && (
@@ -406,6 +419,48 @@ const checkInList = bookings.filter(
               <div className="modal-footer justify-content-center">
                 <button className="btn btn-light px-4" onClick={() => setShowPaymentWarning(false)}>
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* QR CODE MODAL */}
+      {qrModal.show && (
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="ri-qr-code-line me-2"></i>Digital Check-in QR
+                </h5>
+                <button className="btn-close" onClick={() => setQrModal({ show: false, qrCode: '', booking: null })}></button>
+              </div>
+              <div className="modal-body text-center py-4">
+                <p className="text-muted mb-3">
+                  Guest ko yeh QR code scan karke self check-in karne do
+                </p>
+                {qrModal.qrCode && (
+                  <img src={qrModal.qrCode} alt="QR Code" style={{ width: 220, height: 220 }} />
+                )}
+                <div className="mt-3">
+                  <div className="fw-semibold">{qrModal.booking?.guestName || qrModal.booking?.userId?.name}</div>
+                  <small className="text-muted">Room {qrModal.booking?.roomId?.roomNumber} — {new Date(qrModal.booking?.checkInDate).toLocaleDateString('en-PK')}</small>
+                </div>
+                <div className="alert alert-info mt-3 text-start">
+                  <i className="ri-information-line me-1"></i>
+                  Guest should go to their profile page → click the <strong>"Self Check-in"</strong> button on the booking card
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-light" onClick={() => setQrModal({ show: false, qrCode: '', booking: null })}>Close</button>
+                <button className="btn btn-success" onClick={() => {
+                  const link = document.createElement('a');
+                  link.download = `checkin-qr-${qrModal.booking?._id}.png`;
+                  link.href = qrModal.qrCode;
+                  link.click();
+                }}>
+                  <i className="ri-download-line me-1"></i>Download QR
                 </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -10,6 +10,11 @@ const Settings = () => {
   const [activeTab, setActiveTab] = useState('hotel');
   const [success, setSuccess] = useState('');
   const [error, setError]     = useState('');
+  const [qrCode, setQrCode] = useState('');
+  const [secret, setSecret] = useState('');
+  const [tfaCode, setTfaCode] = useState('');
+  const [tfaStep, setTfaStep] = useState('idle');
+  const [tfaEnabled, setTfaEnabled] = useState(false);
 
   const [hotelInfo, setHotelInfo] = useState({
     hotelName:   'Hotel Management System',
@@ -28,7 +33,7 @@ const Settings = () => {
 
   const persistSettings = async (key, value, successMsg) => {
     try {
-      await axios.post(`${API_URL}/settings`, { key, value }, { headers });
+      await api.post(`${API_URL}/settings`, { key, value }, { headers });
       localStorage.setItem(`hotel_${key}`, JSON.stringify(value));
       showSuccess(successMsg);
     } catch {
@@ -49,7 +54,7 @@ const Settings = () => {
   useEffect(() => {
     const loadFromApi = async () => {
       try {
-        const res = await axios.get(`${API_URL}/settings`, { headers });
+        const res = await api.get(`${API_URL}/settings`, { headers });
         const s = res.data;
      if (s.hotelInfo) setHotelInfo(s.hotelInfo);
       } catch {
@@ -62,8 +67,8 @@ const Settings = () => {
 
 const tabs = [
     { key: 'hotel', label: 'Hotel Info', icon: 'ri-building-line' },
+    { key: 'security', label: 'Security', icon: 'ri-shield-line' },
   ];
-
   return (
     <div className="container-fluid">
       <div className="row">
@@ -162,6 +167,53 @@ const tabs = [
                     <i className="ri-save-line me-1"></i> Save Hotel Info
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+       {/* ── SECURITY / 2FA ── */}
+          {activeTab === 'security' && (
+            <div className="card">
+              <div className="card-header">
+                <h5 className="card-title mb-0">
+                  <i className="ri-shield-line me-2 text-primary"></i>Two-Factor Authentication
+                </h5>
+                <small className="text-muted">Secure your login with Google Authenticator</small>
+              </div>
+              <div className="card-body">
+                <p className="text-muted small">
+                  {tfaEnabled ? '✅ 2FA is enabled on your account.' : '❌ 2FA is not enabled. Enable it for extra security.'}
+                </p>
+                {!tfaEnabled && tfaStep === 'idle' && (
+                  <button className="btn btn-primary" onClick={async () => {
+                    const res = await api.post('/auth/2fa/setup', {}, { headers: { Authorization: `Bearer ${token}` } });
+                    setQrCode(res.data.qrCode);
+                    setSecret(res.data.secret);
+                    setTfaStep('setup');
+                  }}>Enable 2FA</button>
+                )}
+                {tfaStep === 'setup' && (
+                  <div>
+                    <p className="small">Scan this QR code in Google Authenticator:</p>
+                    <img src={qrCode} alt="QR Code" style={{ width: 180 }} />
+                    <p className="small mt-2">Or enter manually: <code>{secret}</code></p>
+                    <input type="text" className="form-control mt-2" placeholder="6-digit code" maxLength={6}
+                      value={tfaCode} onChange={e => setTfaCode(e.target.value.replace(/\D/g, ''))} />
+                    <button className="btn btn-success mt-2" onClick={async () => {
+                      await api.post('/auth/2fa/enable', { token: tfaCode }, { headers: { Authorization: `Bearer ${token}` } });
+                      setTfaEnabled(true);
+                      setTfaStep('idle');
+                    }}>Verify & Enable</button>
+                  </div>
+                )}
+                {tfaEnabled && (
+                  <button className="btn btn-danger btn-sm" onClick={async () => {
+                    const code = prompt('Enter your current 2FA code to disable:');
+                    if (!code) return;
+                    await api.post('/auth/2fa/disable', { token: code }, { headers: { Authorization: `Bearer ${token}` } });
+                    setTfaEnabled(false);
+                  }}>Disable 2FA</button>
+                )}
               </div>
             </div>
           )}

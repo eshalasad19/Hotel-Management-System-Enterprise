@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -20,7 +20,7 @@ const AboutUs = () => {
 
   const loadAbout = async () => {
     try {
-      const res = await axios.get(`${API_URL}/about`, { headers });
+      const res = await api.get(`${API_URL}/about`, { headers });
       setAbout(res.data);
       setInfoForm({
         hotelName: res.data.hotelName || '',
@@ -41,7 +41,7 @@ const AboutUs = () => {
   const handleSaveInfo = async () => {
     setLoading(true);
     try {
-      await axios.put(`${API_URL}/about`, infoForm, {
+      await api.put(`${API_URL}/about`, infoForm, {
         headers: { ...headers, 'Content-Type': 'application/json' }
       });
       showMsg('About Us saved successfully!');

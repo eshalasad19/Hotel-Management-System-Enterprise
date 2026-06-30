@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../Context/AuthContext";
+import ConfirmModal from "./ConfirmModal";
+import { apiCall } from "./apiHelper";
 import axios from "axios";
 
 const BASE_URL = "http://localhost:5001/api";
@@ -878,7 +880,7 @@ const formatDate = (date) => {
 /* ─────────────────────────────────────────────
    GUEST REQUEST MODAL COMPONENT
 ───────────────────────────────────────────── */
-function GuestRequestModal({ booking, token, user, onClose }) {
+function GuestRequestModal({ booking, token, user, onClose, refreshAccessToken }) {
   const [activeTab, setActiveTab] = useState('maintenance');
   const [submitting, setSubmitting] = useState(false);
   const [popup, setPopup] = useState({ show: false, type: '', message: '' });
@@ -896,11 +898,10 @@ function GuestRequestModal({ booking, token, user, onClose }) {
   useEffect(() => {
     const fetchMyServices = async () => {
       try {
-        const headers = { Authorization: `Bearer ${token}` };
         const [maintRes, hkRes, svcRes] = await Promise.allSettled([
-          axios.get(`${BASE_URL}/maintenance/my`, { headers }),
-          axios.get(`${BASE_URL}/housekeeping/my`, { headers }),
-          axios.get(`${BASE_URL}/services/my`, { headers }),
+          apiCall(token, refreshAccessToken, (t) => axios.get(`${BASE_URL}/maintenance/my`, { headers: { Authorization: `Bearer ${t}` } })),
+          apiCall(token, refreshAccessToken, (t) => axios.get(`${BASE_URL}/housekeeping/my`, { headers: { Authorization: `Bearer ${t}` } })),
+          apiCall(token, refreshAccessToken, (t) => axios.get(`${BASE_URL}/services/my`, { headers: { Authorization: `Bearer ${t}` } })),
         ]);
         const toArr = (r) => r.status === 'fulfilled'
           ? (Array.isArray(r.value.data) ? r.value.data : Array.isArray(r.value.data?.data) ? r.value.data.data : [])
@@ -933,14 +934,16 @@ function GuestRequestModal({ booking, token, user, onClose }) {
     if (!maintForm.issue.trim()) { showPopup('error', 'Please describe the issue.'); return; }
     try {
       setSubmitting(true);
-      await axios.post(`${BASE_URL}/maintenance`, {
-        roomId: roomId || undefined,
-        roomNumber,
-        issue: maintForm.issue,
-        issueType: maintForm.issueType,
-        priority: maintForm.priority,
-        reportedBy: user?._id || user?.id,
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      await apiCall(token, refreshAccessToken, (t) =>
+        axios.post(`${BASE_URL}/maintenance`, {
+          roomId: roomId || undefined,
+          roomNumber,
+          issue: maintForm.issue,
+          issueType: maintForm.issueType,
+          priority: maintForm.priority,
+          reportedBy: user?._id || user?.id,
+        }, { headers: { Authorization: `Bearer ${t}` } })
+      );
       showPopup('success', 'Maintenance request submitted! Our team will assist you shortly.');
       setMaintForm({ issueType: 'other', issue: '', priority: 'medium' });
     } catch (err) {
@@ -951,15 +954,17 @@ function GuestRequestModal({ booking, token, user, onClose }) {
   const handleHkSubmit = async () => {
     try {
       setSubmitting(true);
-      await axios.post(`${BASE_URL}/housekeeping`, {
-        roomId: roomId || undefined,
-        roomNumber,
-        taskType: hkForm.taskType,
-        notes: hkForm.notes,
-        priority: 'medium',
-        guestRequest: true,
-        requestedBy: user?._id || user?.id,
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      await apiCall(token, refreshAccessToken, (t) =>
+        axios.post(`${BASE_URL}/housekeeping`, {
+          roomId: roomId || undefined,
+          roomNumber,
+          taskType: hkForm.taskType,
+          notes: hkForm.notes,
+          priority: 'medium',
+          guestRequest: true,
+          requestedBy: user?._id || user?.id,
+        }, { headers: { Authorization: `Bearer ${t}` } })
+      );
       showPopup('success', 'Housekeeping request submitted! Staff will arrive soon.');
       setHkForm({ taskType: 'room_cleaning', notes: '' });
     } catch (err) {
@@ -970,11 +975,13 @@ function GuestRequestModal({ booking, token, user, onClose }) {
   const handleSvcSubmit = async () => {
     try {
       setSubmitting(true);
-      await axios.post(`${BASE_URL}/services`, {
-        serviceType: svcForm.serviceType,
-        description: svcForm.description,
-        roomNumber,
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      await apiCall(token, refreshAccessToken, (t) =>
+        axios.post(`${BASE_URL}/services`, {
+          serviceType: svcForm.serviceType,
+          description: svcForm.description,
+          roomNumber,
+        }, { headers: { Authorization: `Bearer ${t}` } })
+      );
       showPopup('success', 'Service request submitted! We\'ll take care of it.');
       setSvcForm({ serviceType: 'room_service', description: '' });
     } catch (err) {
@@ -1231,7 +1238,7 @@ function GuestRequestModal({ booking, token, user, onClose }) {
 /* ─────────────────────────────────────────────
    ORDER MODAL COMPONENT
 ───────────────────────────────────────────── */
-function OrderModal({ booking, token, user, onClose }) {
+function OrderModal({ booking, token, user, onClose, refreshAccessToken }) {
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -1252,9 +1259,8 @@ function OrderModal({ booking, token, user, onClose }) {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await axios.get(
-          `${BASE_URL}/restaurant/orders/user/${user._id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const res = await apiCall(token, refreshAccessToken, (t) =>
+          axios.get(`${BASE_URL}/restaurant/orders/user/${user._id}`, { headers: { Authorization: `Bearer ${t}` } })
         );
         const raw = res.data;
         const orders = Array.isArray(raw) ? raw
@@ -1275,9 +1281,9 @@ function OrderModal({ booking, token, user, onClose }) {
   useEffect(() => {
     const fetchMenu = async () => {
       try {
-        const res = await axios.get(`${BASE_URL}/restaurant/menu`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiCall(token, refreshAccessToken, (t) =>
+          axios.get(`${BASE_URL}/restaurant/menu`, { headers: { Authorization: `Bearer ${t}` } })
+        );
         // Handle various response shapes: plain array, {data:[]}, {menu:[]}, {items:[]}
         const raw = res.data;
         const items = Array.isArray(raw)
@@ -1357,15 +1363,14 @@ function OrderModal({ booking, token, user, onClose }) {
           };
         }),
       };
-      await axios.post(`${BASE_URL}/restaurant/orders/`, orderPayload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiCall(token, refreshAccessToken, (t) =>
+        axios.post(`${BASE_URL}/restaurant/orders/`, orderPayload, { headers: { Authorization: `Bearer ${t}` } })
+      );
       showPopup('success', 'Order placed successfully! 🍽️');
       // Refresh orders then switch to orders tab
       try {
-        const r2 = await axios.get(
-          `${BASE_URL}/restaurant/orders/user/${user._id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const r2 = await apiCall(token, refreshAccessToken, (t) =>
+          axios.get(`${BASE_URL}/restaurant/orders/user/${user._id}`, { headers: { Authorization: `Bearer ${t}` } })
         );
         const raw2 = r2.data;
         const updated = Array.isArray(raw2) ? raw2
@@ -1605,12 +1610,12 @@ function OrderModal({ booking, token, user, onClose }) {
             {loadingMenu ? (
               <div className="order-loading-wrap">
                 <div className="spinner-border" style={{ color: "#c9a96e" }}></div>
-                <p className="mt-3" style={{ color: "#bbb", fontSize: "13px" }}>Menu load ho raha hai...</p>
+                <p className="mt-3" style={{ color: "#bbb", fontSize: "13px" }}>Loading menu...</p>
               </div>
             ) : filteredItems.length === 0 ? (
               <div className="order-empty-wrap">
                 <div style={{ fontSize: "36px", marginBottom: "12px" }}>🍽️</div>
-                Koi menu item nahi mila
+                No menu items found
               </div>
             ) : (
               Object.entries(grouped).map(([cat, items]) => (
@@ -1748,7 +1753,7 @@ function OrderModal({ booking, token, user, onClose }) {
    MAIN PROFILE PAGE
 ───────────────────────────────────────────── */
 export default function ProfilePage() {
-  const { user, token, login } = useAuth();
+  const { user, token, login, refreshAccessToken } = useAuth();
   const navigate = useNavigate();
 
   const [bookings, setBookings] = useState([]);
@@ -1762,6 +1767,7 @@ export default function ProfilePage() {
   const [orderModalBooking, setOrderModalBooking] = useState(null);
   const [guestRequestBooking, setGuestRequestBooking] = useState(null);
   const [myRequests, setMyRequests] = useState([]);
+  const [confirmModal, setConfirmModal] = useState({ show: false });
 const [loadingRequests, setLoadingRequests] = useState(false);
   const [popup, setPopup] = useState({ show: false, type: '', message: '' });
   const showPopup = (type, message) => {
@@ -1770,22 +1776,43 @@ const [loadingRequests, setLoadingRequests] = useState(false);
   };// booking for which modal is open
 
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
-
+  const [loyaltyData, setLoyaltyData] = useState({ points: 0, tier: { name: 'Bronze', icon: '🥉', color: 'danger' } });
+const [preferences, setPreferences] = useState({
+    roomType: '', floorLevel: '', pillowType: '', dietaryNeeds: '',
+    extraBlanket: false, quietRoom: false, notes: ''
+  });
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => {
     if (!user) { navigate("/user-login"); return; }
     setForm({ name: user.name || "", email: user.email || "", phone: user.phone || "" });
+   // Loyalty points + preferences fetch karo
+    const uid = user._id || user.id;
+    if (uid) {
+      apiCall(token, refreshAccessToken, (t) =>
+        axios.get(`${BASE_URL}/guest-crm/${uid}/loyalty`, { headers: { Authorization: `Bearer ${t}` } })
+      ).then(res => {
+        if (res.data.success) setLoyaltyData(res.data);
+      }).catch(() => {});
+
+      apiCall(token, refreshAccessToken, (t) =>
+        axios.get(`${BASE_URL}/guest-crm/${uid}`, { headers: { Authorization: `Bearer ${t}` } })
+      ).then(res => {
+        if (res.data.profile?.preferences) {
+          setPreferences(prev => ({ ...prev, ...res.data.profile.preferences }));
+        }
+      }).catch(() => {});
+    }
   }, [user]);
 useEffect(() => {
     if (!user?._id && !user?.id) return;
     const fetchRequests = async () => {
       setLoadingRequests(true);
       try {
-        const uid = user._id || user.id;
-        const headers = { Authorization: `Bearer ${token}` };
         const [maintRes, hkRes, svcRes] = await Promise.allSettled([
-          axios.get(`${BASE_URL}/maintenance/my`, { headers }),
-          axios.get(`${BASE_URL}/housekeeping/my`, { headers }),
-          axios.get(`${BASE_URL}/services/my`, { headers }),
+          apiCall(token, refreshAccessToken, (t) => axios.get(`${BASE_URL}/maintenance/my`, { headers: { Authorization: `Bearer ${t}` } })),
+          apiCall(token, refreshAccessToken, (t) => axios.get(`${BASE_URL}/housekeeping/my`, { headers: { Authorization: `Bearer ${t}` } })),
+          apiCall(token, refreshAccessToken, (t) => axios.get(`${BASE_URL}/services/my`, { headers: { Authorization: `Bearer ${t}` } })),
         ]);
         const maint = (maintRes.status === 'fulfilled' ? maintRes.value.data : [])
           .map(r => ({ ...r, _type: 'maintenance', _label: 'Maintenance', _icon: '🔧' }));
@@ -1808,9 +1835,9 @@ useEffect(() => {
     const fetchBookings = async () => {
       try {
         const userId = user._id || user.id;
-        const res = await axios.get(`${BASE_URL}/bookings/user/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiCall(token, refreshAccessToken, (t) =>
+          axios.get(`${BASE_URL}/bookings/user/${userId}`, { headers: { Authorization: `Bearer ${t}` } })
+        );
         setBookings(res.data);
       } catch (err) {
         showPopup('error', 'Booking is not loading');
@@ -1826,10 +1853,8 @@ useEffect(() => {
     if (!form.name.trim()) { showPopup('error', 'Name is required'); return; }
     try {
       setUpdating(true);
-      const res = await axios.put(
-        `${BASE_URL}/auth/profile/update`,
-        { name: form.name, phone: form.phone },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await apiCall(token, refreshAccessToken, (t) =>
+        axios.put(`${BASE_URL}/auth/profile/update`, { name: form.name, phone: form.phone }, { headers: { Authorization: `Bearer ${t}` } })
       );
       login({ ...user, name: res.data.user.name, phone: res.data.user.phone }, token);
       showPopup('success', 'Profile updated successfully!');
@@ -1851,9 +1876,11 @@ useEffect(() => {
     }
     try {
       setChangingPass(true);
-      await axios.put(`${BASE_URL}/auth/profile/change-password`,
-        { currentPassword: passForm.currentPassword, newPassword: passForm.newPassword },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await apiCall(token, refreshAccessToken, (t) =>
+        axios.put(`${BASE_URL}/auth/profile/change-password`,
+          { currentPassword: passForm.currentPassword, newPassword: passForm.newPassword },
+          { headers: { Authorization: `Bearer ${t}` } }
+        )
       );
       showPopup('success', 'Password changed successfully!');
       setShowPassForm(false);
@@ -1862,18 +1889,41 @@ useEffect(() => {
       showPopup('error', err.response?.data?.message || 'Failed to change password');
     } finally { setChangingPass(false); }
   };
-
-  const handleCancelBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to cancel this booking?')) return;
+const handleSavePreferences = async () => {
+    setSavingPrefs(true);
     try {
-      await axios.put(`${BASE_URL}/bookings/${bookingId}/cancel`, {},
-        { headers: { Authorization: `Bearer ${token}` } }
+      const uid = user._id || user.id;
+      await apiCall(token, refreshAccessToken, (t) =>
+        axios.put(`${BASE_URL}/guest-crm/${uid}`, { preferences }, { headers: { Authorization: `Bearer ${t}` } })
       );
-      showPopup('success', 'Booking cancelled successfully');
-      setBookings(prev => prev.map(b => b._id === bookingId ? { ...b, bookingStatus: 'cancelled' } : b));
-    } catch (err) {
-      showPopup('error', err.response?.data?.message || 'Failed to cancel booking');
+      showPopup('success', 'Preferences saved successfully!');
+      setShowPrefs(false);
+    } catch {
+      showPopup('error', 'Failed to save preferences.');
+    } finally {
+      setSavingPrefs(false);
     }
+  };
+  const handleCancelBooking = (bookingId) => {
+    setConfirmModal({
+      show: true,
+      title: 'Cancel Booking?',
+      message: 'Are you sure you want to cancel this booking? This action cannot be undone.',
+      confirmText: 'Yes, Cancel Booking',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal({ show: false });
+        try {
+          await apiCall(token, refreshAccessToken, (t) =>
+            axios.put(`${BASE_URL}/bookings/${bookingId}/cancel`, {}, { headers: { Authorization: `Bearer ${t}` } })
+          );
+          showPopup('success', 'Booking cancelled successfully');
+          setBookings(prev => prev.map(b => b._id === bookingId ? { ...b, bookingStatus: 'cancelled' } : b));
+        } catch (err) {
+          showPopup('error', err.response?.data?.message || 'Failed to cancel booking');
+        }
+      },
+    });
   };
 
   const tabs = [
@@ -1942,9 +1992,21 @@ useEffect(() => {
             booking={orderModalBooking}
             token={token}
             user={user}
+            refreshAccessToken={refreshAccessToken}
             onClose={() => setOrderModalBooking(null)}
           />
         )}
+
+        {/* CONFIRM MODAL */}
+        <ConfirmModal
+          show={confirmModal.show}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          danger={confirmModal.danger}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal({ show: false })}
+        />
 
         {/* GUEST REQUEST MODAL */}
         {guestRequestBooking && (
@@ -1952,6 +2014,7 @@ useEffect(() => {
             booking={guestRequestBooking}
             token={token}
             user={user}
+            refreshAccessToken={refreshAccessToken}
             onClose={() => setGuestRequestBooking(null)}
           />
         )}
@@ -2097,7 +2160,118 @@ useEffect(() => {
                       </div>
                     </form>
                   )}
+{/* LOYALTY POINTS */}
+                  <div style={{
+                    marginTop: 16, padding: '14px 16px',
+                    background: 'linear-gradient(135deg, #1a1510, #2d231a)',
+                    borderRadius: 14, textAlign: 'center',
+                    border: '1px solid rgba(201,169,110,0.2)'
+                  }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+                      Loyalty Points
+                    </div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: '#c9a96e', lineHeight: 1 }}>
+                      {loyaltyData.points || 0}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                      = PKR {((loyaltyData.points || 0) * 10).toLocaleString()} discount value
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '3px 12px',
+                        borderRadius: 20, background: 'rgba(201,169,110,0.15)',
+                        color: '#c9a96e', border: '1px solid rgba(201,169,110,0.3)'
+                      }}>
+                        {loyaltyData.tier?.icon} {loyaltyData.tier?.name} Member
+                      </span>
+                    </div>
+                  </div>
+                  {/* PREFERENCES */}
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      onClick={() => setShowPrefs(!showPrefs)}
+                      style={{
+                        width: '100%', padding: '10px', borderRadius: 50,
+                        border: '1px solid rgba(201,169,110,0.3)',
+                        background: 'transparent', color: '#c9a96e',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                      }}
+                    >
+                      <span>⚙️</span> {showPrefs ? 'Hide' : 'My Preferences'}
+                    </button>
 
+                    {showPrefs && (
+                      <div style={{ marginTop: 12, padding: '14px', background: '#fdf8f2', borderRadius: 12, border: '1px solid #f0e8dc' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a96e', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
+                          Room Preferences
+                        </div>
+
+                        {[
+                          { label: 'Room Type', key: 'roomType', options: ['', 'single', 'double', 'suite', 'deluxe'] },
+                          { label: 'Floor Level', key: 'floorLevel', options: ['', 'low', 'high', 'any'] },
+                          { label: 'Pillow Type', key: 'pillowType', options: ['', 'soft', 'firm', 'any'] },
+                          { label: 'Dietary Needs', key: 'dietaryNeeds', options: ['', 'none', 'vegetarian', 'halal', 'vegan'] },
+                        ].map(f => (
+                          <div key={f.key} style={{ marginBottom: 10 }}>
+                            <label style={{ fontSize: 10, fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>
+                              {f.label}
+                            </label>
+                            <select
+                              className="profile-form-input"
+                              style={{ borderRadius: 8, padding: '8px 12px' }}
+                              value={preferences[f.key] || ''}
+                              onChange={e => setPreferences(prev => ({ ...prev, [f.key]: e.target.value }))}
+                            >
+                              {f.options.map(o => <option key={o} value={o}>{o || 'Select...'}</option>)}
+                            </select>
+                          </div>
+                        ))}
+
+                        <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+                          {[
+                            { key: 'extraBlanket', label: '🛏️ Extra Blanket' },
+                            { key: 'quietRoom', label: '🔇 Quiet Room' },
+                          ].map(f => (
+                            <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={preferences[f.key] || false}
+                                onChange={e => setPreferences(prev => ({ ...prev, [f.key]: e.target.checked }))}
+                              />
+                              {f.label}
+                            </label>
+                          ))}
+                        </div>
+
+                        <div style={{ marginBottom: 12 }}>
+                          <label style={{ fontSize: 10, fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>
+                            Special Notes
+                          </label>
+                          <textarea
+                            className="profile-form-input"
+                            style={{ borderRadius: 8, resize: 'none' }}
+                            rows={2}
+                            placeholder="Any other preferences..."
+                            value={preferences.notes || ''}
+                            onChange={e => setPreferences(prev => ({ ...prev, notes: e.target.value }))}
+                          />
+                        </div>
+
+                        <button
+                          onClick={handleSavePreferences}
+                          disabled={savingPrefs}
+                          style={{
+                            width: '100%', padding: '9px', borderRadius: 50,
+                            border: 'none', background: 'linear-gradient(135deg, #c9a96e, #a67c45)',
+                            color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                          }}
+                        >
+                          {savingPrefs ? 'Saving...' : '✓ Save Preferences'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   {/* STATS */}
                   <div className="profile-stats">
                     <div className="profile-stat-item">
@@ -2317,7 +2491,39 @@ useEffect(() => {
                                   <i className="fa-solid fa-money-bill me-1"></i>
                                   {booking.paymentMethod?.toUpperCase()}
                                 </span>
-
+{/* ── SELF CHECK-IN BUTTON (online booking guests) ── */}
+                                {['confirmed', 'pending'].includes(booking.bookingStatus) && (
+                                  <button
+                                    className="btn order-now-btn"
+                                    style={{ background: 'linear-gradient(135deg, #1a3a2a, #1e5a3e)' }}
+                                    onClick={() => {
+                                      setConfirmModal({
+                                        show: true,
+                                        title: 'Confirm Check-in',
+                                        message: 'Are you ready to check in now? This will mark your stay as active.',
+                                        confirmText: 'Yes, Check-in Now',
+                                        danger: false,
+                                        onConfirm: async () => {
+                                          setConfirmModal({ show: false });
+                                          try {
+                                            await apiCall(token, refreshAccessToken, (t) =>
+                                              axios.post(`${BASE_URL}/bookings/qr-checkin`, { bookingId: booking._id }, { headers: { Authorization: `Bearer ${t}` } })
+                                            );
+                                            showPopup('success', 'Check-in successful! Welcome to the hotel 🏨');
+                                            setBookings(prev => prev.map(b =>
+                                              b._id === booking._id ? { ...b, bookingStatus: 'checked_in' } : b
+                                            ));
+                                          } catch (err) {
+                                            showPopup('error', err.response?.data?.message || 'Check-in failed');
+                                          }
+                                        },
+                                      });
+                                    }}
+                                  >
+                                    <i className="fa-solid fa-door-open" style={{ fontSize: '10px' }}></i>
+                                    Check-in Now
+                                  </button>
+                                )}
                                 {/* ── ORDER NOW BUTTON (only for checked_in) ── */}
                                 {isCheckedIn && (
                                   <button

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from '../../api/authApi';
 import CustomPopup from './CustomPopup';
 
 const API_URL = "http://localhost:5001/api";
@@ -48,9 +48,9 @@ const Rooms = () => {
  const loadRooms = async () => {
     try {
       const [roomsRes, maintRes, hkRes] = await Promise.all([
-        axios.get(`${API_URL}/rooms`, { headers }),
-        axios.get(`${API_URL}/maintenance`, { headers }),
-        axios.get(`${API_URL}/housekeeping`, { headers }),
+        api.get(`${API_URL}/rooms`, { headers }),
+        api.get(`${API_URL}/maintenance`, { headers }),
+        api.get(`${API_URL}/housekeeping`, { headers }),
       ]);
       const activeMaint = maintRes.data.filter(r => r.status !== 'resolved');
       const activeHk = hkRes.data.filter(r => r.cleaningStatus !== 'completed');
@@ -122,7 +122,7 @@ const Rooms = () => {
       form.amenities.split(",").forEach(a => formData.append("amenities", a.trim()));
       form.images.forEach(img => formData.append("images", img));
 
-      await axios.post(`${API_URL}/rooms`, formData, {
+      await api.post(`${API_URL}/rooms`, formData, {
         headers: { ...headers, "Content-Type": "multipart/form-data" },
       });
       setShowAddModal(false);
@@ -146,7 +146,7 @@ const Rooms = () => {
       if (form.images?.length > 0) {
         form.images.forEach(img => formData.append("images", img));
       }
-      await axios.put(`${API_URL}/rooms/${selectedRoom._id}`, formData, {
+      await api.put(`${API_URL}/rooms/${selectedRoom._id}`, formData, {
         headers: { ...headers, "Content-Type": "multipart/form-data" },
       });
       setShowEditModal(false);
@@ -156,7 +156,7 @@ const Rooms = () => {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`${API_URL}/rooms/${selectedRoom._id}`, { headers });
+      await api.delete(`${API_URL}/rooms/${selectedRoom._id}`, { headers });
       setShowDeleteModal(false);
       loadRooms();
     } catch (err) { setPopup({ type: 'error', message: err.response?.data?.message || "Cannot delete room" }); }
@@ -164,7 +164,7 @@ const Rooms = () => {
 
   const changeStatus = async (id, status) => {
     try {
-      await axios.put(`${API_URL}/rooms/${id}`, { status }, { headers });
+      await api.put(`${API_URL}/rooms/${id}`, { status }, { headers });
       loadRooms();
     } catch (err) { console.error(err); }
   };

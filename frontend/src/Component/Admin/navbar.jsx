@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../../api/authApi';
+import NotificationBell from './NotificationBell';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -65,7 +66,7 @@ const Navbar = () => {
       const endpoint = ['admin', 'manager'].includes(role)
         ? `${API_URL}/notifications/all`
         : `${API_URL}/notifications/my`;
-      const res = await axios.get(endpoint, {
+      const res = await api.get(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(res.data);
@@ -74,7 +75,7 @@ const Navbar = () => {
 
   const handleMarkRead = async (id) => {
     try {
-      await axios.put(`${API_URL}/notifications/${id}/read`, {}, {
+      await api.put(`${API_URL}/notifications/${id}/read`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
@@ -83,7 +84,7 @@ const Navbar = () => {
 
   const handleMarkAllRead = async () => {
     try {
-      await axios.put(`${API_URL}/notifications/mark-all-read`, {}, {
+      await api.put(`${API_URL}/notifications/mark-all-read`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
@@ -113,7 +114,7 @@ const Navbar = () => {
           <div className="d-flex align-items-center gap-1">
 
          
-
+<NotificationBell />
             {/* ── USER PROFILE ── */}
             <div ref={userRef} style={{ position: 'relative' }}>
               <button
