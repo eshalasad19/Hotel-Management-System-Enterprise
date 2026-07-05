@@ -3,7 +3,7 @@ import axios from 'axios';
 import { userAsset } from '../../../../utils/userAssets';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = (process.env.REACT_APP_SERVER_URL || 'http://localhost:5001');
 
 export default function AboutIntro() {
   const [about, setAbout] = useState(null);

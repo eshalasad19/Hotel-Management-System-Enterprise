@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../Context/AuthContext";
 import ConfirmModal from "./ConfirmModal";
+import FeedbackModal from "./FeedbackModal";
 import { apiCall } from "./apiHelper";
 import axios from "axios";
 
-const BASE_URL = "http://localhost:5001/api";
+const BASE_URL = (process.env.REACT_APP_API_URL || "http://localhost:5001/api");
 
 const PROFILE_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500;600;700&display=swap');
@@ -868,8 +869,8 @@ const statusConfig = {
 const getImageUrl = (img) => {
   if (!img) return null;
   if (img.startsWith("http")) return img;
-  if (img.startsWith("uploads/")) return `http://localhost:5001/${img}`;
-  return `http://localhost:5001/uploads/${img}`;
+  if (img.startsWith("uploads/")) return `${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/${img}`;
+  return `${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/uploads/${img}`;
 };
 
 const formatDate = (date) => {
@@ -1757,6 +1758,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
 
   const [bookings, setBookings] = useState([]);
+  const [feedbackModalBooking, setFeedbackModalBooking] = useState(null);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [editMode, setEditMode] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -2007,6 +2009,20 @@ const handleSavePreferences = async () => {
           onConfirm={confirmModal.onConfirm}
           onClose={() => setConfirmModal({ show: false })}
         />
+
+        {/* FEEDBACK MODAL */}
+        {feedbackModalBooking && (
+          <FeedbackModal
+            booking={feedbackModalBooking}
+            showPopup={showPopup}
+            onClose={() => setFeedbackModalBooking(null)}
+            onSubmitted={(bookingId) => {
+              setBookings((prev) =>
+                prev.map((b) => (b._id === bookingId ? { ...b, feedbackGiven: true } : b))
+              );
+            }}
+          />
+        )}
 
         {/* GUEST REQUEST MODAL */}
         {guestRequestBooking && (
@@ -2544,6 +2560,52 @@ const handleSavePreferences = async () => {
                                   >
                                     <i className="fa-solid fa-bell-concierge" style={{ fontSize: "10px" }}></i>
                                     Request Service
+                                  </button>
+                                )}
+
+                                {/* ── DOWNLOAD INVOICE BUTTON (only for paid bookings) ── */}
+                                {booking.paymentStatus === 'paid' && (
+                                  <button
+                                    className="btn order-now-btn"
+                                    style={{ background: 'linear-gradient(135deg, #2a2a4a, #3a3a6b)' }}
+                                    onClick={async () => {
+                                      try {
+                                        const response = await apiCall(token, refreshAccessToken, (t) =>
+                                          axios.get(`${BASE_URL}/bookings/${booking._id}/invoice`, {
+                                            headers: { Authorization: `Bearer ${t}` },
+                                            responseType: 'blob',
+                                          })
+                                        );
+                                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        link.setAttribute('download', `Invoice-${booking._id.slice(-8).toUpperCase()}.pdf`);
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        link.remove();
+                                        window.URL.revokeObjectURL(url);
+                                      } catch (err) {
+                                        showPopup('error', 'Failed to download invoice');
+                                      }
+                                    }}
+                                  >
+                                    <i className="fa-solid fa-file-invoice" style={{ fontSize: '10px' }}></i>
+                                    Download Invoice
+                                  </button>
+                                )}
+
+                                {/* ── LEAVE FEEDBACK BUTTON (only checked-out/completed, not already reviewed) ── */}
+                                {["checked_out", "completed"].includes(booking.bookingStatus) && !booking.feedbackGiven && (
+                                  <button
+                                    className="btn"
+                                    style={{
+                                      background: "linear-gradient(135deg, #c9a96e, #a67c40)",
+                                      color: "#fff", border: "none",
+                                    }}
+                                    onClick={() => setFeedbackModalBooking(booking)}
+                                  >
+                                    <i className="fa-solid fa-star" style={{ fontSize: '10px' }}></i>
+                                    Leave Feedback
                                   </button>
                                 )}
 

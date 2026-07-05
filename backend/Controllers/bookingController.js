@@ -10,6 +10,27 @@ const {
 const { calculatePrice } = require('../Services/pricingService');
 const GuestProfile = require('../Models/GuestProfile');
 const QRCode = require('qrcode');
+
+// ========================
+// Helper: check karo ke ek room in exact dates ke liye
+// pehle se kisi confirmed/pending booking se conflict to nahi karta
+// (room.status ek single flag hai jo "aaj" ka haal batata hai,
+// isliye future date-range booking ke liye asal Bookings collection
+// check karna zaroori hai)
+// ========================
+const isRoomAvailableForDates = async (roomId, checkInDate, checkOutDate, excludeBookingId = null) => {
+  const query = {
+    roomId,
+    bookingStatus: { $in: ["pending", "confirmed", "checked_in"] },
+    checkInDate: { $lt: checkOutDate },
+    checkOutDate: { $gt: checkInDate },
+  };
+  if (excludeBookingId) query._id = { $ne: excludeBookingId };
+
+  const conflict = await Booking.findOne(query);
+  return !conflict;
+};
+
 // ========================
 // CREATE BOOKING
 // ========================
@@ -23,7 +44,17 @@ const createBooking = async (req, res) => {
 
     const room = await Room.findById(roomId);
     if (!room) return res.status(404).json({ message: "Room not found" });
-    if (room.status !== "available") return res.status(400).json({ message: "Room is not available" });
+
+    // Sirf maintenance/inactive rooms ko turant reject karo — baqi cheez date-overlap se decide hogi
+    if (["maintenance", "inactive"].includes(room.status)) {
+      return res.status(400).json({ message: "Room is currently unavailable (maintenance)." });
+    }
+
+    // Asal availability check — in dates ke liye koi conflicting booking to nahi
+    const available = await isRoomAvailableForDates(roomId, checkInDate, checkOutDate);
+    if (!available) {
+      return res.status(400).json({ message: "Room is already booked for the selected dates." });
+    }
 
    const days = Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24));
     let amount = totalAmount;
@@ -34,7 +65,15 @@ const createBooking = async (req, res) => {
 
     let finalPaymentStatus = paymentMethod === "online" ? "paid" : (paymentStatus || "pending");
     let finalBookingStatus = finalPaymentStatus === "paid" ? "confirmed" : (bookingStatus || "pending");
-    let finalRoomStatus = finalPaymentStatus === "paid" ? "occupied" : "reserved";
+
+    // Room ka status sirf tab "occupied/reserved" karo agar check-in AAJ ya guzar chuki tareekh hai
+    // (future dates ke liye room ka "current" status nahi badalna chahiye, warna doosri dates
+    // ke liye booking galat tarike se blocked ho jayegi)
+    const isCheckInTodayOrPast = new Date(checkInDate) <= new Date();
+    let finalRoomStatus = room.status;
+    if (isCheckInTodayOrPast) {
+      finalRoomStatus = finalPaymentStatus === "paid" ? "occupied" : "reserved";
+    }
 
     const booking = await Booking.create({
       userId: req.body.userId || req.user?._id,
@@ -46,7 +85,9 @@ const createBooking = async (req, res) => {
     });
 
     if (booking.userId) await User.findByIdAndUpdate(booking.userId, { $push: { bookings: booking._id } });
-    await Room.findByIdAndUpdate(roomId, { status: finalRoomStatus });
+    if (finalRoomStatus !== room.status) {
+      await Room.findByIdAndUpdate(roomId, { status: finalRoomStatus });
+    }
 
     // ✅ AUDIT LOG
     await auditLog.log(req, {
@@ -108,12 +149,12 @@ const createBooking = async (req, res) => {
     // Send emails
     await sendEmail({
       to: booking.guestEmail,
-      subject: 'Booking Confirmation',
+      subject: booking.bookingStatus === 'confirmed' ? 'Booking Confirmed' : 'Booking Received',
       html: bookingConfirmationTemplate({
         name: booking.guestName, roomNo: room.roomNumber,
         checkInDate: booking.checkInDate, checkOutDate: booking.checkOutDate,
         totalPrice: booking.totalAmount, paymentMethod: booking.paymentMethod,
-        paymentStatus: booking.paymentStatus,
+        paymentStatus: booking.paymentStatus, bookingStatus: booking.bookingStatus,
       }),
     });
 
@@ -205,6 +246,22 @@ const updateBookingStatus = async (req, res) => {
 
     if (bookingStatus === "completed" && booking.bookingStatus !== "completed") {
       await Room.findByIdAndUpdate(booking.roomId, { status: "available" });
+    }
+
+    // Pending se confirmed hone par confirmation email bhejo
+    // (jaise reception par cash payment collect hone ke baad admin status update kare)
+    if (bookingStatus === "confirmed" && booking.bookingStatus !== "confirmed") {
+      const room = await Room.findById(booking.roomId);
+      await sendEmail({
+        to: booking.guestEmail,
+        subject: 'Booking Confirmed',
+        html: bookingConfirmationTemplate({
+          name: booking.guestName, roomNo: room?.roomNumber,
+          checkInDate: booking.checkInDate, checkOutDate: booking.checkOutDate,
+          totalPrice: booking.totalAmount, paymentMethod: booking.paymentMethod,
+          paymentStatus: paymentStatus || booking.paymentStatus, bookingStatus: 'confirmed',
+        }),
+      });
     }
 
     const updatedBooking = await Booking.findByIdAndUpdate(
@@ -448,9 +505,158 @@ const qrCheckIn = async (req, res) => {
   }
 };
 
+
+// ========================
+// DOWNLOAD INVOICE (PDF) — Guest apni khud ki booking ka invoice
+// ========================
+const downloadInvoice = async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+
+    const booking = await Booking.findById(req.params.id).populate('roomId', 'roomNumber type price');
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+
+    // Security check: guest sirf apni khud ki booking ka invoice dekh sake
+    // Admin/manager/receptionist kisi ki bhi dekh sakte hain
+    const staffRolesAllowed = ['admin', 'manager', 'receptionist'];
+    const isOwner = booking.userId && booking.userId.toString() === req.user._id.toString();
+    const isStaff = staffRolesAllowed.includes(req.user.role);
+
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ message: 'Access denied. This is not your booking.' });
+    }
+
+    // Sirf paid/confirmed bookings ka hi invoice bane
+    if (booking.paymentStatus !== 'paid') {
+      return res.status(400).json({ message: 'Invoice sirf paid bookings ke liye available hai.' });
+    }
+
+    const room = booking.roomId;
+    const invoiceNumber = `INV-${booking._id.toString().slice(-8).toUpperCase()}`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Invoice-${invoiceNumber}.pdf`);
+
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    doc.pipe(res);
+
+    // ── Header ──
+    doc
+      .fillColor('#4f46e5')
+      .fontSize(24)
+      .text('🏨 Hotel Management System', { align: 'left' })
+      .moveDown(0.2);
+
+    doc
+      .fillColor('#333')
+      .fontSize(10)
+      .text('123 Hotel Street, Karachi, Pakistan', { align: 'left' })
+      .text('Email: adminhotel@gmail.com', { align: 'left' })
+      .moveDown(1.5);
+
+    // ── Invoice title & meta ──
+    doc
+      .fillColor('#000')
+      .fontSize(18)
+      .text('INVOICE', { align: 'right' });
+
+    doc
+      .fontSize(10)
+      .fillColor('#555')
+      .text(`Invoice Number: ${invoiceNumber}`, { align: 'right' })
+      .text(`Date Issued: ${new Date().toLocaleDateString()}`, { align: 'right' })
+      .moveDown(1.5);
+
+    // ── Divider ──
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#ddd').stroke();
+    doc.moveDown(1);
+
+    // ── Guest info ──
+    doc.fillColor('#000').fontSize(12).text('Billed To:', { underline: true });
+    doc.fontSize(11).fillColor('#333')
+      .text(`Name: ${booking.guestName || 'N/A'}`)
+      .text(`Email: ${booking.guestEmail || 'N/A'}`)
+      .text(`Phone: ${booking.guestPhone || 'N/A'}`)
+      .moveDown(1);
+
+    // ── Booking details table ──
+    doc.fillColor('#000').fontSize(12).text('Booking Details:', { underline: true }).moveDown(0.5);
+
+    const rows = [
+      ['Room Number', room?.roomNumber || 'N/A'],
+      ['Room Type', room?.type || 'N/A'],
+      ['Check-In Date', new Date(booking.checkInDate).toLocaleDateString()],
+      ['Check-Out Date', new Date(booking.checkOutDate).toLocaleDateString()],
+      ['Guests', String(booking.guests)],
+      ['Payment Method', booking.paymentMethod?.toUpperCase() || 'N/A'],
+      ['Payment Status', booking.paymentStatus?.toUpperCase() || 'N/A'],
+    ];
+
+    if (booking.discountAmount > 0) {
+      rows.push(['Loyalty Discount', `- Rs. ${booking.discountAmount}`]);
+    }
+
+    rows.forEach(([label, value]) => {
+      doc
+        .fontSize(10)
+        .fillColor('#666')
+        .text(label, 50, doc.y, { continued: true, width: 250 })
+        .fillColor('#111')
+        .text(value, { align: 'right' });
+    });
+
+    doc.moveDown(1);
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#ddd').stroke();
+    doc.moveDown(1);
+
+    // ── Total ──
+    doc
+      .fontSize(14)
+      .fillColor('#4f46e5')
+      .text(`Total Paid: Rs. ${booking.totalAmount}`, { align: 'right' })
+      .moveDown(2);
+
+    // ── Footer ──
+    doc
+      .fontSize(9)
+      .fillColor('#999')
+      .text('Thank you for choosing our hotel. This is a system-generated invoice.', { align: 'center' });
+
+    doc.end();
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// ========================
+// GET ROOM'S BOOKED DATES (for calendar) — public, no auth needed
+// Guest ko room booking page par yahi dikhega ke kaunse dates available nahi
+// ========================
+const getRoomBookedDates = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const bookings = await Booking.find({
+      roomId: id,
+      bookingStatus: { $in: ["pending", "confirmed", "checked_in"] },
+      checkOutDate: { $gte: new Date() }, // guzri hui bookings zaroori nahi
+    }).select("checkInDate checkOutDate -_id");
+
+    const bookedRanges = bookings.map((b) => ({
+      checkIn: b.checkInDate,
+      checkOut: b.checkOutDate,
+    }));
+
+    res.status(200).json({ bookedRanges });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
 module.exports = {
   createBooking, getMyBookings, getBookingsByUserId,
   getAllBookings, updateBookingStatus, checkInBooking,
   checkOutBooking, completeBooking, updatePaymentStatus,
-  generateBookingQR, qrCheckIn,
+  generateBookingQR, qrCheckIn, downloadInvoice,
+  getRoomBookedDates,
 };

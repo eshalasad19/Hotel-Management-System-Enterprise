@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/authApi';
 
-const API_URL = 'http://localhost:5001/api';
+const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5001/api');
 
 const Staff = () => {
   const token = localStorage.getItem('token');
@@ -38,7 +38,7 @@ const Staff = () => {
   const loadStaff = async () => {
     try {
       const res = await api.get(`${API_URL}/auth/users`, { headers });
-      const staffOnly = res.data.filter(u =>
+      const staffOnly = (res.data.users || []).filter(u =>
         ['manager', 'receptionist', 'housekeeping', 'maintenance', 'kitchen'].includes(u.role)
       );
       setStaff(staffOnly);

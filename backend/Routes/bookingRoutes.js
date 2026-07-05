@@ -13,6 +13,8 @@ const {
   updatePaymentStatus,
   generateBookingQR,
   qrCheckIn,
+  downloadInvoice,
+  getRoomBookedDates,
 } = require('../Controllers/bookingController');
 
 const {
@@ -23,6 +25,9 @@ const {
 
 // Create Booking
 router.post('/', protect, createBooking);
+
+// Room ki booked dates (calendar ke liye) — public route, login zaroori nahi
+router.get('/room/:id/booked-dates', getRoomBookedDates);
 
 // QR Check-in
 router.post('/qr-checkin', protect, qrCheckIn);
@@ -38,6 +43,9 @@ router.get('/all', protect, staffRoles('admin', 'manager', 'receptionist'), getA
 
 // QR Code generate
 router.get('/:bookingId/qr', protect, generateBookingQR);
+
+// Download Invoice (PDF) — guest apni khud ki booking ka invoice
+router.get('/:id/invoice', protect, downloadInvoice);
 
 // User cancel booking
 router.put('/:id/cancel', protect, async (req, res) => {

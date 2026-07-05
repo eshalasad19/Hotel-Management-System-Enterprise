@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRooms } from "../../../../api/roomApi";
 
-const BASE_URL = "http://localhost:5001";
+const BASE_URL = (process.env.REACT_APP_SERVER_URL || "http://localhost:5001");
 
 const getImageUrl = (img) => {
   if (!img) return null;

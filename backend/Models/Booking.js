@@ -82,6 +82,22 @@ redeemedPoints: {
   default: 0,
 },
 
+// Reminder emails dobara na jayen isliye tracking flags
+checkInReminderSent: {
+  type: Boolean,
+  default: false,
+},
+checkOutReminderSent: {
+  type: Boolean,
+  default: false,
+},
+
+// Duplicate feedback rokne ke liye
+feedbackGiven: {
+  type: Boolean,
+  default: false,
+},
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('Booking', bookingSchema);

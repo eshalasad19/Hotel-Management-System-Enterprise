@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
-const BASE_URL = "http://localhost:5001/api";
+const BASE_URL = (process.env.REACT_APP_API_URL || "http://localhost:5001/api");
 
 // ✅ Category enum ko readable title mein convert karo
 const CATEGORY_LABELS = {

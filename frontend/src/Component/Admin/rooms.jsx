@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import api from '../../api/authApi';
 import CustomPopup from './CustomPopup';
 
-const API_URL = "http://localhost:5001/api";
+const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5001/api");
 
 // Settings se pricing load karo
 const getPricingFromSettings = () => {
@@ -276,7 +276,7 @@ const Rooms = () => {
                     <td><small className="text-muted">{room.amenities?.slice(0, 3).join(", ") || "—"}</small></td>
                     <td>
                       {room.images?.length > 0 ? (
-                        <img src={`http://localhost:5001/uploads/${room.images[0]}`} alt="room"
+                        <img src={`${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/uploads/${room.images[0]}`} alt="room"
                           width="70" height="70" style={{ objectFit: "cover", borderRadius: "8px" }} />
                       ) : <span className="text-muted">No Image</span>}
                     </td>
@@ -480,7 +480,7 @@ const Rooms = () => {
                     {selectedRoom?.images?.length > 0 && (
                       <div className="d-flex gap-2 flex-wrap mb-3">
                         {selectedRoom.images.map((img, idx) => (
-                          <img key={idx} src={`http://localhost:5001/uploads/${img}`} alt="room"
+                          <img key={idx} src={`${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/uploads/${img}`} alt="room"
                             width="80" height="80" style={{ objectFit: "cover", borderRadius: "8px" }} />
                         ))}
                       </div>
@@ -518,7 +518,7 @@ const Rooms = () => {
                 <div className="d-flex gap-2 flex-wrap mb-4">
                   {viewRoom.images?.length > 0 ? (
                     viewRoom.images.map((img, idx) => (
-                      <img key={idx} src={`http://localhost:5001/uploads/${img}`} alt="room"
+                      <img key={idx} src={`${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/uploads/${img}`} alt="room"
                         width="150" height="120" style={{ objectFit: "cover", borderRadius: "10px" }} />
                     ))
                   ) : <p className="text-muted">No Images</p>}

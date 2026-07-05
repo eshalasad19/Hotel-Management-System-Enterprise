@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../api/authApi';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = (process.env.REACT_APP_SERVER_URL || 'http://localhost:5001');
 const CATEGORIES = ['Desi', 'Italian', 'Chinese', 'FastFood'];
 const DIETARY_TAGS = [
   { value: 'spicy',   label: '🌶 Spicy' },

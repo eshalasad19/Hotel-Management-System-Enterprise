@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { userAsset } from "../../../../utils/userAssets";
 import axios from "axios";
 
-const BASE_URL = "http://localhost:5001/api";
+const BASE_URL = (process.env.REACT_APP_API_URL || "http://localhost:5001/api");
 
 export default function ContactFormSection() {
   const [form, setForm] = useState({ name: "", phone: "", email: "", rating: 0, review: "" });

@@ -9,6 +9,12 @@ const feedbackSchema = new mongoose.Schema({
     required: false,
     default: null
   },
+  bookingId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Booking",
+    required: false,
+    default: null
+  },
   name: { type: String, default: "Guest" },
   email: { type: String, default: "" },
   phone: { type: String, default: "" },

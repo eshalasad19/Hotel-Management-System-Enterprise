@@ -452,15 +452,36 @@ const setup2FAWithToken = async (req, res) => {
     const user = await User.findById(decoded.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
-    const secret = speakeasy.generateSecret({
-      name: `Hotel Management (${user.email})`,
-      length: 20,
-    });
+    // FIX: Agar user ke paas pehle se secret maujood hai (setup abhi verify nahi hua),
+    // to wahi purana secret dobara use karo — naya mat banao.
+    // Isse ye masla nahi hoga: user ne ek QR scan kiya, phir dobara login try kiya,
+    // aur naye secret ne purana overwrite kar diya (jisse "Invalid code" aata tha
+    // kyunke phone ka authenticator app purane secret se code bana raha hota tha).
+    let secretBase32;
+    let otpauthUrl;
 
-    await User.findByIdAndUpdate(user._id, { twoFactorSecret: secret.base32, twoFactorVerified: false });
-    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+    if (user.twoFactorSecret && !user.twoFactorVerified) {
+      // Purana unverified secret dobara use karo
+      secretBase32 = user.twoFactorSecret;
+      otpauthUrl = speakeasy.otpauthURL({
+        secret: secretBase32,
+        encoding: 'base32',
+        label: `Hotel Management (${user.email})`,
+      });
+    } else {
+      // Bilkul naya secret banao (pehli dafa setup ho raha hai)
+      const secret = speakeasy.generateSecret({
+        name: `Hotel Management (${user.email})`,
+        length: 20,
+      });
+      secretBase32 = secret.base32;
+      otpauthUrl = secret.otpauth_url;
+      await User.findByIdAndUpdate(user._id, { twoFactorSecret: secretBase32, twoFactorVerified: false });
+    }
 
-    res.status(200).json({ success: true, qrCode: qrCodeUrl, secret: secret.base32 });
+    const qrCodeUrl = await QRCode.toDataURL(otpauthUrl);
+
+    res.status(200).json({ success: true, qrCode: qrCodeUrl, secret: secretBase32 });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error.', error: err.message });
   }
@@ -474,6 +495,15 @@ const enable2FAWithToken = async (req, res) => {
 
     const user = await User.findById(decoded.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    // DEBUG: Time-sync masla check karne ke liye — terminal mein dikhayega
+    // server kya expect kar raha hai vs aapne kya bheja.
+    const expectedCode = speakeasy.totp({ secret: user.twoFactorSecret, encoding: 'base32' });
+    console.log('=== 2FA DEBUG ===');
+    console.log('Server ka current time:', new Date().toISOString());
+    console.log('Server expected code (abhi):', expectedCode);
+    console.log('Aapne bheja hua code:', token);
+    console.log('=================');
 
     const verified = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token, window: 1 });
     if (!verified) return res.status(400).json({ success: false, message: 'Invalid code.' });

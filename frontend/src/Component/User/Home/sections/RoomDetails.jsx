@@ -43,11 +43,11 @@ const RoomDetails = () => {
 
     // Agar DB mein uploads/filename save hai
     if (img.startsWith("uploads/")) {
-      return `http://localhost:5001/${img}`;
+      return `${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/${img}`;
     }
 
     // Agar sirf filename save hai
-    return `http://localhost:5001/uploads/${img}`;
+    return `${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/uploads/${img}`;
   };
 
   // LOADING

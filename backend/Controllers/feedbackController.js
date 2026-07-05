@@ -1,11 +1,12 @@
 // ===== feedbackController.js (Controller) =====
 
 const Feedback = require('../Models/Feedback');
+const Booking = require('../Models/Booking');
 
 // POST /api/feedbacks
 const submitFeedback = async (req, res) => {
   try {
-    const { name, email, phone, rating, review, userId } = req.body;
+    const { name, email, phone, rating, review, userId, bookingId } = req.body;
 
     // Validation
     if (!rating || Number(rating) < 1 || Number(rating) > 5) {
@@ -26,6 +27,19 @@ const submitFeedback = async (req, res) => {
     // userId sirf tab add karo jab valid MongoDB ObjectId ho
     if (userId && /^[a-fA-F0-9]{24}$/.test(userId)) {
       feedbackData.userId = userId;
+    }
+
+    // Agar kisi specific booking se feedback aaya hai, to us booking ko mark karo
+    // taake dobara feedback button na dikhe
+    if (bookingId && /^[a-fA-F0-9]{24}$/.test(bookingId)) {
+      const booking = await Booking.findById(bookingId);
+      if (booking) {
+        if (booking.feedbackGiven) {
+          return res.status(400).json({ error: "Is booking ka feedback pehle hi diya ja chuka hai" });
+        }
+        feedbackData.bookingId = bookingId;
+        await Booking.findByIdAndUpdate(bookingId, { feedbackGiven: true });
+      }
     }
 
     const feedback = await Feedback.create(feedbackData);

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getSingleRoom } from "../../../../api/roomApi";
 import { useAuth } from "../../../../Context/AuthContext";
+import AvailabilityCalendar from "./AvailabilityCalendar";
 
 const BookingPage = () => {
   const { roomId } = useParams();
@@ -58,7 +59,7 @@ const BookingPage = () => {
     let currentToken = token;
     try {
       const response = await axios.post(
-        "http://localhost:5001/api/bookings",
+        (process.env.REACT_APP_API_URL || "http://localhost:5001/api") + "/bookings",
         bookingData,
         { headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` } }
       );
@@ -69,7 +70,7 @@ const BookingPage = () => {
         currentToken = await refreshAccessToken();
         if (!currentToken) throw err;
         const response = await axios.post(
-          "http://localhost:5001/api/bookings",
+          (process.env.REACT_APP_API_URL || "http://localhost:5001/api") + "/bookings",
           bookingData,
           { headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` } }
         );
@@ -128,6 +129,10 @@ const BookingPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.checkInDate || !form.checkOutDate) {
+      setErrorModal({ show: true, message: 'Please select both check-in and check-out dates from the calendar.' });
+      return;
+    }
     setLoading(true);
     try {
      await createBooking({ roomId, ...form, totalAmount, userId: user?._id || user?.id });
@@ -181,16 +186,14 @@ const BookingPage = () => {
                       placeholder="Enter email address" value={form.guestEmail} onChange={handleChange} required />
                   </div>
 
-                  <div className="col-md-6">
-                    <label className="form-label fw-semibold">Check In</label>
-                    <input type="date" name="checkInDate" className="form-control form-control-lg"
-                      min={today} value={form.checkInDate} onChange={handleChange} required />
-                  </div>
-
-                  <div className="col-md-6">
-                    <label className="form-label fw-semibold">Check Out</label>
-                    <input type="date" name="checkOutDate" className="form-control form-control-lg"
-                      min={form.checkInDate || today} value={form.checkOutDate} onChange={handleChange} required />
+                  <div className="col-12">
+                    <label className="form-label fw-semibold">Select Your Dates</label>
+                    <AvailabilityCalendar
+                      roomId={roomId}
+                      checkInDate={form.checkInDate}
+                      checkOutDate={form.checkOutDate}
+                      onChange={(checkInDate, checkOutDate) => setForm({ ...form, checkInDate, checkOutDate })}
+                    />
                   </div>
 
                   <div className="col-md-6">
@@ -243,7 +246,7 @@ const BookingPage = () => {
 
               <div className="position-relative">
                 <img
-                  src={room?.images?.[0] ? `http://localhost:5001/Uploads/${room.images[0]}` : "https://via.placeholder.com/700x450"}
+                  src={room?.images?.[0] ? `${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/Uploads/${room.images[0]}` : "https://via.placeholder.com/700x450"}
                   alt={room.type} className="w-100" style={{ height: "280px", objectFit: "cover" }}
                 />
                 <div className="position-absolute top-0 end-0 bg-primary text-white px-3 py-2 m-3 rounded-pill fw-semibold">

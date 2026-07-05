@@ -4,104 +4,47 @@ const Booking = require('../Models/Booking');
 const Room = require('../Models/Room');
 
 const sendEmail = require('../Services/emailService');
+const { checkInReminderTemplate } = require('../Utils/emailTemplates');
 
 cron.schedule('0 9 * * *', async () => {
-
   try {
-
     console.log('Running check-in reminder cron job...');
 
     const bookings = await Booking.find({
-      bookingStatus: {
-        $in: ['confirmed', 'pending']
-      }
+      bookingStatus: { $in: ['confirmed', 'pending'] },
+      checkInReminderSent: { $ne: true }, // sirf wo bookings jinhe reminder abhi tak nahi gaya
     });
 
     const today = new Date();
 
     for (const booking of bookings) {
-
       const checkIn = new Date(booking.checkInDate);
-
-      // Difference in days
       const diffTime = checkIn - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      const diffDays = Math.ceil(
-        diffTime / (1000 * 60 * 60 * 24)
-      );
-
-      // 1 day before check-in
+      // 1 din pehle
       if (diffDays === 1) {
-
         const room = await Room.findById(booking.roomId);
 
         await sendEmail({
-
           to: booking.guestEmail,
-
-          subject: 'Check-In Reminder',
-
-          html: `
-          
-            <div style="
-              font-family: Arial;
-              padding: 30px;
-              background: #f4f4f4;
-            ">
-
-              <div style="
-                max-width: 600px;
-                margin: auto;
-                background: white;
-                padding: 30px;
-                border-radius: 10px;
-              ">
-
-                <h2 style="color:#4f46e5;">
-                  Your Check-In is Tomorrow
-                </h2>
-
-                <p>Hello ${booking.guestName},</p>
-
-                <p>
-                  This is a reminder that your hotel check-in is tomorrow.
-                </p>
-
-                <table width="100%" cellpadding="10">
-
-                  <tr>
-                    <td><strong>Room Number</strong></td>
-                    <td>${room.roomNumber}</td>
-                  </tr>
-
-                  <tr>
-                    <td><strong>Check-In Date</strong></td>
-                    <td>${booking.checkInDate}</td>
-                  </tr>
-
-                  <tr>
-                    <td><strong>Check-Out Date</strong></td>
-                    <td>${booking.checkOutDate}</td>
-                  </tr>
-
-                </table>
-
-                <p style="margin-top:20px;">
-                  We look forward to welcoming you.
-                </p>
-
-              </div>
-
-            </div>
-          `,
+          subject: 'Check-In Reminder — Tomorrow is Your Check-In Day',
+          html: checkInReminderTemplate({
+            name: booking.guestName,
+            roomNo: room?.roomNumber,
+            checkInDate: booking.checkInDate,
+            checkOutDate: booking.checkOutDate,
+            paymentStatus: booking.paymentStatus,
+            paymentMethod: booking.paymentMethod,
+          }),
         });
 
-        console.log(
-          `Check-in reminder sent to ${booking.guestEmail}`
-        );
+        // Flag set karo taake dobara na jaye
+        await Booking.findByIdAndUpdate(booking._id, { checkInReminderSent: true });
+
+        console.log(`Check-in reminder sent to ${booking.guestEmail}`);
       }
     }
-
   } catch (error) {
     console.log(error);
   }

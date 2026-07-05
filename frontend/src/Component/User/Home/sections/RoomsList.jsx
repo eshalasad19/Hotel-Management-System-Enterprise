@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRooms, getSingleRoom } from "../../../../api/roomApi";
 
-const BASE_URL = "http://localhost:5001";
+const BASE_URL = (process.env.REACT_APP_SERVER_URL || "http://localhost:5001");
 
 const getImageUrl = (img) => {
   if (!img) return "https://via.placeholder.com/800x500?text=No+Image";
   if (img.startsWith("http")) return img;
   // Sirf filename hai jaise "double-room.jpg"
-  return `http://localhost:5001/Uploads/${img}`;
+  return `${process.env.REACT_APP_SERVER_URL || "http://localhost:5001"}/Uploads/${img}`;
 };
 
 const getAmenityIcon = (name = "") => {
@@ -70,10 +70,12 @@ const getAmenityIcon = (name = "") => {
 };
 
 const isRoomUnavailable = (status) => {
+  // Sirf maintenance/cleaning wale rooms hi poori tarah block karo.
+  // "occupied"/"reserved"/"booked" ka matlab sirf itna hai ke room
+  // KISI date range ke liye booked hai — booking form ka calendar
+  // khud dikha dega ke kaunse dates free hain. Isliye button block
+  // nahi karna, warna guest doosri free dates bhi book nahi kar sakega.
   const unavailable = [
-    "booked",
-    "occupied",
-    "reserved",
     "maintenance",
     "cleaning",
   ];

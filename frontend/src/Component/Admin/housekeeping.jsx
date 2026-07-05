@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/authApi';
 
-const API_URL = 'http://localhost:5001/api';
+const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5001/api');
 
 const TASK_TYPES = [
   { value: 'room_cleaning',    label: 'Room Cleaning' },
