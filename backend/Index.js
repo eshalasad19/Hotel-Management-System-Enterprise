@@ -42,7 +42,7 @@ require('./cron/feedbackReminder');
 // STATIC FILES
 // ============================================================
 app.use('/Uploads', express.static(path.join(__dirname, 'Uploads')));
-app.use(express.static('Public'));
+// app.use(express.static('Public'));
 
 // ============================================================
 // ROUTES
@@ -100,13 +100,22 @@ app.use('/api/guest-crm', guestCRMRoutes);
 // ============================================================
 // HEALTH CHECK
 // ============================================================
-app.get('/', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     message: 'Hotel Management API is running',
     version: '2.0.0',
     timestamp: new Date().toISOString(),
   });
+});
+
+// ============================================================
+// SERVE FRONTEND (React build)
+// ============================================================
+app.use(express.static(path.join(__dirname, 'Public')));
+
+app.get(/^(?!\/api).*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'Public', 'index.html'));
 });
 
 // ============================================================
