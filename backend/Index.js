@@ -7,7 +7,9 @@ const connectDB = require('./Config/Db');
 dotenv.config();
 
 const app = express();
-
+app.set('trust proxy', 1); 
+const compression = require('compression');
+app.use(compression());
 // ============================================================
 // SECURITY MIDDLEWARE (must be first)
 // ============================================================
@@ -42,7 +44,10 @@ require('./cron/feedbackReminder');
 // STATIC FILES
 // ============================================================
 app.use('/Uploads', express.static(path.join(__dirname, 'Uploads')));
-// app.use(express.static('Public'));
+app.use(express.static('Public', {
+  maxAge: '30d',
+  etag: true,
+}));
 
 // ============================================================
 // ROUTES
@@ -112,7 +117,7 @@ app.get('/api/health', (req, res) => {
 // ============================================================
 // SERVE FRONTEND (React build)
 // ============================================================
-app.use(express.static(path.join(__dirname, 'Public')));
+// app.use(express.static(path.join(__dirname, 'Public')));
 
 app.get(/^(?!\/api).*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'Public', 'index.html'));
