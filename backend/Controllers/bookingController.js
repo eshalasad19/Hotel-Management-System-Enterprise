@@ -9,6 +9,7 @@ const {
 } = require('../Utils/emailTemplates');
 const { calculatePrice } = require('../Services/pricingService');
 const GuestProfile = require('../Models/GuestProfile');
+const { awardLoyaltyPoints, reverseLoyaltyPoints } = require('../Services/loyaltyService');
 const QRCode = require('qrcode');
 
 // ========================
@@ -122,18 +123,12 @@ const createBooking = async (req, res) => {
       }
     }
 
-    // Loyalty points earn karo — PKR 100 = 1 point
-    if (booking.userId) {
-      const finalAmount = booking.totalAmount - discountAmount;
-      const pointsEarned = Math.floor(finalAmount / 100);
-      await GuestProfile.findOneAndUpdate(
-        { userId: booking.userId },
-        {
-          $inc: { loyaltyPoints: pointsEarned },
-          $setOnInsert: { userId: booking.userId }
-        },
-        { upsert: true, new: true }
-      );
+    // Loyalty points earn karo — sirf tab jab payment "paid" ho chuki ho
+    // (e.g. online payment). Cash/pending bookings ko points check-out/payment
+    // confirm hone par milte hain, taake unpaid ya cancelled bookings par
+    // points na diye jayein.
+    if (booking.userId && finalPaymentStatus === "paid") {
+      await awardLoyaltyPoints(booking._id);
     }
 // Real-time notification
     const io = req.app.get('io');
@@ -270,6 +265,15 @@ const updateBookingStatus = async (req, res) => {
       { new: true }
     );
 
+    // Loyalty points: payment "paid" hote hi award karo
+    if (paymentStatus === "paid") {
+      await awardLoyaltyPoints(booking._id);
+    }
+    // Loyalty points: booking cancel hone par (agar award ho chuke thay) wapis le lo
+    if (bookingStatus === "cancelled" && booking.bookingStatus !== "cancelled") {
+      await reverseLoyaltyPoints(booking._id);
+    }
+
     // ✅ AUDIT LOG
     await auditLog.log(req, {
       action: bookingStatus === 'cancelled' ? 'BOOKING_CANCELLED' : 'BOOKING_UPDATED',
@@ -404,6 +408,9 @@ const updatePaymentStatus = async (req, res) => {
     if (booking.bookingStatus === "pending") booking.bookingStatus = "confirmed";
     await booking.save();
     await Room.findByIdAndUpdate(booking.roomId, { status: "occupied" });
+
+    // Loyalty points award karo
+    await awardLoyaltyPoints(booking._id);
 
     // ✅ AUDIT LOG
     await auditLog.log(req, {

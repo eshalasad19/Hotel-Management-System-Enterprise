@@ -82,6 +82,17 @@ redeemedPoints: {
   default: 0,
 },
 
+// Loyalty points earned tracking — points sirf tab count hote hain jab
+// payment "paid" ho jaye, aur agar booking cancel ho to wapis le liye jate hain
+loyaltyPointsAwarded: {
+  type: Boolean,
+  default: false,
+},
+loyaltyPointsEarned: {
+  type: Number,
+  default: 0,
+},
+
 // Reminder emails dobara na jayen isliye tracking flags
 checkInReminderSent: {
   type: Boolean,

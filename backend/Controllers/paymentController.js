@@ -1,6 +1,7 @@
 const Payment = require('../Models/Payment');
 const Booking = require('../Models/Booking');
 const auditLog = require('../Services/auditLogService'); // ✅ ADD
+const { awardLoyaltyPoints } = require('../Services/loyaltyService');
 
 // ========================
 // CREATE PAYMENT
@@ -22,6 +23,9 @@ const createPayment = async (req, res) => {
     });
 
     await Booking.findByIdAndUpdate(bookingId, { paymentStatus: 'paid' });
+
+    // Loyalty points award karo
+    await awardLoyaltyPoints(bookingId);
 
     // ✅ AUDIT LOG
     await auditLog.log(req, {
