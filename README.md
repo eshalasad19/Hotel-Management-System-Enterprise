@@ -2,7 +2,7 @@
 
 A full-stack Hotel Management System built with the MERN Stack (MongoDB, Express.js, React.js, Node.js). It gives hotel administrators and guests a complete platform for room bookings, restaurant ordering, payments, housekeeping, maintenance, guest relationship management, and real-time operations tracking.
 
-**Live:** [hms.thelearnerz.com](https://hms.thelearnerz.com)
+**Live:** [hms.payasguest.com](https://hms.payasguest.com)
 
 ---
 
